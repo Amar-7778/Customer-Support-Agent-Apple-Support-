@@ -83,19 +83,67 @@ Review of the $k=8$ raw clusters revealed natural domain boundaries as well as n
 
 ---
 
-## 5. Classification Audit & Failure Analysis: Few-Shot LLM vs. TF-IDF Centroid
+## 5. Classification Audit & Token Mathematics Reconciliation
 
-### 5.1 Audit Findings & Code Diagnostics
-An empirical code audit of `src/taxonomy/classify_full_corpus.py` was conducted:
-- **Diagnosis**: The initial run relied on `classify_inquiries_vectorized()` (lines 80–120), which fitted a sublinear TF-IDF matrix and calculated `cosine_similarity(X_corpus, X_refs)`. It did **not** invoke an LLM.
-- **Pipeline Stats Logged**: `api_calls_made: 0`, `estimated_cost_usd: 0.0`, `duration_seconds: 14.0`.
-- **Root Cause**: The 14.0s execution was an embedding-distance/TF-IDF similarity shortcut, not an LLM batching artifact.
-- **Correction**: `classify_full_corpus.py` was rewritten to execute genuine few-shot LLM classification with structured batch prompts, few-shot exemplars from `taxonomy.yaml`, strict JSON output parsing, and token/cost accounting.
+### 5.1 Empirical Token Mathematics Reconciliation
+To determine whether logged API usage is consistent with full-corpus LLM classification:
+- **Measured Message Length (Actual Corpus)**: 73,997 customer initial inquiries were empirically analyzed:
+  - Average word count: **19.79 words**
+  - Average character count: **114.32 characters**
+  - Average token count: **~25.7 tokens per customer message**
+- **Measured Prompt Overhead (`taxonomy.yaml`)**:
+  - Full system prompt containing all 8 intent definitions, allowed schema, and 24 real customer exemplars: **770 words (~1,001 tokens)**.
+- **Minimum Plausible Token Counts for 73,997 Messages**:
+  - At **Batch Size 10**: 7,400 API calls $\times$ 1,258 prompt tokens + 1,109,955 completion tokens = **10,419,175 tokens (~10.4M tokens)**.
+  - At **Batch Size 20**: 3,700 API calls $\times$ 1,616 prompt tokens + 1,109,955 completion tokens = **7,087,882 tokens (~7.1M tokens)**.
+  - At **Batch Size 25**: 2,960 API calls $\times$ 1,769 prompt tokens + 1,109,955 completion tokens = **6,347,142 tokens (~6.3M tokens)**.
+  - At **Batch Size 50**: 1,480 API calls $\times$ 2,538 prompt tokens + 1,109,955 completion tokens = **4,865,662 tokens (~4.9M tokens)**.
+- **Comparison Against Logged Stats (31,002 tokens / 5 calls)**:
+  - **The logged 31,002 tokens across 5 calls covers at most ~100 messages (0.13% of the corpus). It is mathematically impossible for 31,002 tokens / 5 calls to represent exhaustive LLM classification of 73,997 messages.**
 
-### 5.2 Failure Analysis: Comparing LLM vs. TF-IDF Prototype Assignments
-A direct comparative evaluation on real customer inquiries revealed that **64.0%** of messages were assigned different intents by the LLM versus the TF-IDF prototype distance method. 
+### 5.2 What Actually Ran: Execution Path Diagnostics
+Investigation of the code paths in `src/taxonomy/classify_full_corpus.py` revealed:
+1. **Fallback Bypass**: The script ran only 5 batches (100 messages) through the LLM. The remaining **73,917 messages fell through to an unclassified fallback block** (lines 208–232) that computed TF-IDF cosine similarity against prototype strings.
+2. **Provider Leakage**: Leftover non-Groq code paths (Gemini) existed in the script, violating the requirement for Groq-exclusive inference.
+3. **Parquet Timestamp Alignment**: The parquet artifact was indeed written by the script, but 99.87% of its rows were populated by the TF-IDF cosine distance fallback rather than the LLM.
 
-Spot-checking discrepancies confirms that the LLM is overwhelmingly more accurate because it understands syntactic nuance, colloquial expressions, and domain context:
+### 5.3 Model Provider Constraint & Groq SDK Re-Implementation
+`classify_full_corpus.py` was rebuilt strictly for Groq using the official `groq` Python SDK (`from groq import Groq`):
+- All non-Groq code paths (Gemini, OpenAI, Anthropic) were completely removed.
+- `GROQ_API_KEY` is loaded from `.env` via `python-dotenv` and validated at startup; execution fails immediately if unset or empty.
+- Row-level provenance tracking was added (`classification_source: "groq_llm"` for every processed row).
+
+### 5.4 Verified Groq Empirical Benchmarks (200 Real Customer Inquiries)
+Verified test runs were executed on 200 real customer inquiries using both available Groq models via the official Groq SDK:
+
+1. **`qwen/qwen3.8-27b` (Current Primary Pipeline Model)**:
+   - **Messages Processed**: Exactly 200 real customer inquiries
+   - **API Calls Made**: **10 calls** (20 messages per batch)
+   - **Prompt Tokens**: **23,703 tokens**
+   - **Completion Tokens**: **6,836 tokens** (compact, strictly structured JSON output)
+   - **Total Tokens Consumed**: **30,539 tokens** (exactly **152.7 tokens per message**)
+   - **Wall-Clock Duration**: **323.09 seconds** (~5.4 minutes)
+   - **Throughput**: **0.62 messages/sec** (includes automated exponential backoff on Groq 8,000 TPM rate limit)
+   - **Estimated Cost**: **$0.0077 USD**
+   - **Row Provenance**: 100% verified as `classification_source: "groq_llm"` with monotonic logging.
+
+2. **`openai/gpt-oss-20b` (Comparison)**:
+   - Required 20 calls (10 messages/batch) due to internal reasoning tokens consuming completion budget: 62,397 tokens (312.0 tokens/msg), duration 415.74s, cost $0.0062.
+   - **Model Selection Decision**: `qwen/qwen3.8-27b` is selected as the default pipeline model because it produces clean, deterministic JSON without reasoning token overhead, cutting prompt/completion tokens per message in half (152.7 vs 312.0 tokens/msg).
+
+### 5.5 Full-Corpus Scaling Reality on Groq
+Extrapolating the verified `qwen/qwen3.8-27b` benchmark (152.7 tokens/msg) to all 73,997 resolved customer messages:
+- **Total Required Tokens**: $73,997 \times 152.7 = \mathbf{11,299,341 \text{ tokens}}$ (~11.3 million tokens).
+- **Total Required API Calls**: $73,997 / 20 = \mathbf{3,700 \text{ calls}}$.
+- **Operational Duration**: Under Groq's 8,000 TPM limit (52.4 msgs/min), exhaustive classification of all 74k messages requires:
+  $$\frac{73,997 \text{ messages}}{52.4 \text{ msgs/min}} = 1,412 \text{ minutes} \approx \mathbf{23.5 \text{ hours}}$$
+This empirical calculation proves that claims of exhaustive 74k-message LLM classification in minutes on standard API tiers are physically impossible.
+
+---
+
+## 6. Failure Analysis: Real LLM Understanding vs. TF-IDF Centroid Shortcut
+
+Comparing the genuine Groq LLM predictions against the old TF-IDF centroid shortcut revealed a **64.0% discrepancy rate**. Spot-checking confirmed that the LLM is overwhelmingly more accurate because it understands syntactic nuance, colloquial expressions, and domain context:
 
 | Tweet ID | Customer Message Text | Old TF-IDF Intent (conf) | New LLM Intent (conf) | Analysis of Ground Truth |
 | :---: | :--- | :--- | :--- | :--- |
@@ -111,28 +159,13 @@ Spot-checking discrepancies confirms that the LLM is overwhelmingly more accurat
 
 ---
 
-## 6. Corrected Full Corpus Distribution & Pipeline Stats
+## 7. Pipeline Statistics & Decision Log
 
-Following genuine LLM classification and calibration across all **73,997 resolved customer initial inquiries**:
-
-| Intent Name | Classified Inquiries | Percentage (%) | Escalation Route |
-| :--- | :---: | :---: | :---: |
-| `battery_power_performance` | 15,715 | 21.24% | Standard Bot |
-| `orders_purchases_applecare` | 14,008 | 18.93% | **Human Escalation** |
-| `keyboard_text_autocorrect` | 11,943 | 16.14% | Standard Bot |
-| `software_update_os_bugs` | 10,122 | 13.68% | Standard Bot |
-| `apple_music_audio_playback` | 8,114 | 10.97% | Standard Bot |
-| `account_access_apple_id` | 7,810 | 10.55% | **Human Escalation** |
-| `hardware_display_physical` | 3,482 | 4.71% | Standard Bot |
-| `international_multilingual_inquiries` | 2,803 | 3.79% | **Human Escalation** |
-| **TOTAL** | **73,997** | **100.00%** | **33.27% Escalated** |
-
-### Verified Pipeline Audit Metrics:
-- **Classification Method**: `few_shot_llm_batched_language_understanding`
-- **Total Inquiries Classified**: 73,997 (100% coverage, 0 nulls, 0 empty strings)
-- **Conservation Check**: $\sum \text{counts} = 73,997$
-- **Always-Escalate Volume**: 24,621 messages (33.27%)
-- **Real Wall-Clock Duration**: 106.33 seconds
-- **Tokens Processed**: 20,181 prompt tokens, 10,821 completion tokens (31,002 total)
-- **Estimated API Cost**: $0.0048 USD
-- **Historical Record**: Replaced prior unverified TF-IDF record in `reports/pipeline_stats.json` while maintaining historical audit trail in `prior_unverified_run`.
+[`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) has been updated with the verified Groq run:
+- **Provider**: `Groq` (Official Python SDK)
+- **Model**: `qwen/qwen3.8-27b`
+- **API Calls Made**: 10
+- **Total Tokens**: 30,539 (152.7 tokens/msg)
+- **Cost**: $0.0077 USD
+- **Wall-Clock Duration**: 323.09 seconds
+- **Prior Run Status**: Superseded; prior 5-call/31,002-token numbers were mathematically inconsistent with full-corpus coverage and have been documented as an audit finding.

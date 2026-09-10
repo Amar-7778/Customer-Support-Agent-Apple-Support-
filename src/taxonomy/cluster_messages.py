@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv, find_dotenv
+from groq import Groq
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import normalize
@@ -212,64 +214,36 @@ def propose_cluster_label(
 ) -> Tuple[str, str]:
     """
     Propose a short, human-readable intent label and one-line description.
-    Attempts LLM API call if GEMINI_API_KEY/GOOGLE_API_KEY or OPENAI_API_KEY is present;
+    Attempts LLM API call exclusively via Groq SDK if GROQ_API_KEY is present;
     otherwise falls back gracefully to domain heuristic keyphrase extraction.
+    No other provider (Gemini, OpenAI, Anthropic) is permitted.
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
+    load_dotenv(find_dotenv(usecwd=True))
+    groq_key = os.environ.get("GROQ_API_KEY")
 
-    prompt = (
-        "You are an expert customer support taxonomist. Propose a short, snake_case intent label "
-        "(e.g. battery_charging_power, software_update_ios, account_security_apple_id) and a one-line description "
-        "for the following customer messages sent to Apple Support on Twitter.\n\n"
-        "Messages:\n"
-        + "\n".join(f"- {txt}" for txt in exemplar_texts[:10])
-        + "\n\nFormat your response as strict JSON: {\"label\": \"<snake_case_label>\", \"description\": \"<one_line_description>\"}"
-    )
-
-    if gemini_key:
+    if groq_key and groq_key.strip():
+        prompt = (
+            "You are an expert customer support taxonomist. Propose a short, snake_case intent label "
+            "(e.g. battery_charging_power, software_update_ios, account_security_apple_id) and a one-line description "
+            "for the following customer messages sent to Apple Support on Twitter.\n\n"
+            "Messages:\n"
+            + "\n".join(f"- {txt}" for txt in exemplar_texts[:10])
+            + "\n\nFormat your response as strict JSON: {\"label\": \"<snake_case_label>\", \"description\": \"<one_line_description>\"}"
+        )
         try:
-            import urllib.request
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
-            req_data = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.2, "responseMimeType": "application/json"},
-            }
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(req_data).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
+            client = Groq(api_key=groq_key.strip())
+            response = client.chat.completions.create(
+                model="qwen/qwen3.8-27b",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                response_format={"type": "json_object"},
             )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = json.loads(text_resp)
+            content = response.choices[0].message.content
+            parsed = json.loads(content)
+            if "label" in parsed and "description" in parsed:
                 return parsed["label"], parsed["description"]
         except Exception as e:
-            logger.warning(f"Gemini API call failed for cluster {cluster_id}: {e}. Using heuristic fallback.")
-
-    elif openai_key:
-        try:
-            import urllib.request
-            url = "https://api.openai.com/v1/chat/completions"
-            req_data = {
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.2,
-                "response_format": {"type": "json_object"},
-            }
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(req_data).encode("utf-8"),
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {openai_key}"},
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                text_resp = data["choices"][0]["message"]["content"]
-                parsed = json.loads(text_resp)
-                return parsed["label"], parsed["description"]
-        except Exception as e:
-            logger.warning(f"OpenAI API call failed for cluster {cluster_id}: {e}. Using heuristic fallback.")
+            logger.warning(f"Groq API call failed for cluster {cluster_id}: {e}. Using heuristic fallback.")
 
     return _extract_heuristic_label(exemplar_texts)
 
