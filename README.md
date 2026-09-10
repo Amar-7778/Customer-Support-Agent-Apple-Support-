@@ -81,8 +81,15 @@ This repository implements the first two foundational stages of an end-to-end Cu
 ### Step 1: Clone and Install Dependencies
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd Hiver
+git clone https://github.com/Amar-7778/Customer-Support-Agent-Apple-Support-.git
+cd Customer-Support-Agent-Apple-Support-
+
+# Create and activate a virtual environment
+python -m venv .venv
+# On Windows:
+.\.venv\Scripts\activate
+# On Linux/macOS:
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -95,7 +102,14 @@ data/
 └── raw/
     └── twcs.csv
 ```
-*(If downloading via kagglehub, `kagglehub.dataset_download('thoughtvector/customer-support-on-twitter')` automatically places it in local cache).*
+
+**Option A (Automated Download via Kagglehub):**
+```bash
+python -c "import kagglehub, shutil, os, glob; p = kagglehub.dataset_download('thoughtvector/customer-support-on-twitter'); os.makedirs('data/raw', exist_ok=True); f = glob.glob(p + '/**/twcs.csv', recursive=True)[0]; shutil.copy(f, 'data/raw/twcs.csv'); print('twcs.csv placed at data/raw/twcs.csv')"
+```
+
+**Option B (Manual Download):**
+Download `twcs.csv` directly from [Kaggle Customer Support on Twitter](https://www.kaggle.com/datasets/thoughtvector/customer-support-on-twitter) and place it inside `data/raw/`.
 
 ---
 

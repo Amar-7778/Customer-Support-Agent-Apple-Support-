@@ -76,3 +76,10 @@ This document tracks key architectural, methodological, and infrastructural deci
   - Re-ran `pytest tests/ -v`: **6/6 tests passing** in 3.57s.
   - Re-ran full pipeline on all 2,811,774 rows: Completed in **157.64s** (~2.6 min) with 100% row conservation verified.
   - Updated `.gitignore` to permanently prevent `.pyc`, `.pytest_cache/`, and `.ipynb_checkpoints/` from being committed.
+
+---
+
+## Decision 5: Stage 1–2 Pipeline Validation & Verification Pass
+
+- **Date**: 2026-09-10
+- **Summary**: Completed comprehensive 4-step validation pass (15-thread stratified spot-check in `reports/manual_spotcheck.md`, clean-clone reproduction in 154.04s with 6/6 tests passing, zero leftover artifacts, and zero Git history secrets); confirmed 100% thread reconstruction coherence and documented heuristic edge cases (polysemy and sarcasm) to guide Stage 3 taxonomy modeling (`reports/validation_report.md`).
