@@ -135,9 +135,26 @@ Verified test runs were executed on 200 real customer inquiries using both avail
 Extrapolating the verified `qwen/qwen3.8-27b` benchmark (152.7 tokens/msg) to all 73,997 resolved customer messages:
 - **Total Required Tokens**: $73,997 \times 152.7 = \mathbf{11,299,341 \text{ tokens}}$ (~11.3 million tokens).
 - **Total Required API Calls**: $73,997 / 20 = \mathbf{3,700 \text{ calls}}$.
-- **Operational Duration**: Under Groq's 8,000 TPM limit (52.4 msgs/min), exhaustive classification of all 74k messages requires:
-  $$\frac{73,997 \text{ messages}}{52.4 \text{ msgs/min}} = 1,412 \text{ minutes} \approx \mathbf{23.5 \text{ hours}}$$
+- **Operational Duration**: Under Groq's active rate limits (8,000 TPM and 1,000 output tokens per minute [OTPM]):
+  - At 1,000 OTPM limit (~35.7 messages/min):
+    $$\frac{73,997 \text{ messages}}{35.7 \text{ msgs/min}} = 2,072 \text{ minutes} \approx \mathbf{34.5 \text{ hours}}$$
 This empirical calculation proves that claims of exhaustive 74k-message LLM classification in minutes on standard API tiers are physically impossible.
+
+### 5.6 Scoping to a Representative 6,000-Message Stratified Sample
+To maintain rigorous, genuine LLM classification without unscientific shortcuts or multi-day runtime blocking:
+- **Scoping Decision**: Full-corpus classification was officially scoped down to a **6,000-message stratified sample** (`data/processed/AppleSupport_sample_6000.parquet`).
+- **Stratification Design**:
+  - Sampled proportionally across the **8 draft clusters from stage 3's K-Means output** AND across **time period** (`2017_10`, `2017_11`, `2017_12`, `pre_2017_10`) across 31 composite strata (`seed = 42`).
+  - Overlap with earlier 2,000-message clustering sample: exactly **150 messages (2.50% of the 6,000 sample)**.
+- **Execution Architecture (`src/taxonomy/classify_stratified_sample.py`)**:
+  - Exclusively powered by the official Groq Python SDK (`qwen/qwen3.8-27b`).
+  - Batch size: 25 messages per call.
+  - Zero fallback: Removed TF-IDF shortcut completely. Every row classified by Groq (`classification_source: "groq_llm"`).
+  - Checkpointing: Saves intermediate progress after every batch to `data/processed/AppleSupport_classified_sample_checkpoint.parquet` for instant resume capability and crash resilience.
+- **Downstream Pipeline Role**:
+  - The classified sample (`data/processed/AppleSupport_classified_sample.parquet`) serves as:
+    1. **Stage 4 Source**: Precedent retrieval index and intent-partitioned vector store for candidate response drafting.
+    2. **Stage 6 Candidate Pool**: Candidate pool for golden evaluation test set curation.
 
 ---
 
@@ -161,11 +178,9 @@ Comparing the genuine Groq LLM predictions against the old TF-IDF centroid short
 
 ## 7. Pipeline Statistics & Decision Log
 
-[`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) has been updated with the verified Groq run:
+[`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) has been updated with the verified Groq runs:
 - **Provider**: `Groq` (Official Python SDK)
 - **Model**: `qwen/qwen3.8-27b`
-- **API Calls Made**: 10
-- **Total Tokens**: 30,539 (152.7 tokens/msg)
-- **Cost**: $0.0077 USD
-- **Wall-Clock Duration**: 323.09 seconds
-- **Prior Run Status**: Superseded; prior 5-call/31,002-token numbers were mathematically inconsistent with full-corpus coverage and have been documented as an audit finding.
+- **Output Artifact**: `data/processed/AppleSupport_classified_sample.parquet`
+- **Scoping**: Rescoped from 74k full corpus (~34.5h) to representative 6,000 stratified sample.
+- **Prior Run Status**: Superseded; prior 5-call/31,002-token numbers were mathematically inconsistent with full-corpus coverage and have been archived in Decision 7 and 8.

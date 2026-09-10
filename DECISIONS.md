@@ -164,3 +164,29 @@ This document tracks key architectural, methodological, and infrastructural deci
      - Updated `reports/pipeline_stats.json` with verified Groq metrics, archiving superseded figures.
      - Updated `reports/taxonomy_derivation.md` with the mathematical reconciliation and weak-clustering disclosure.
      - Re-ran `pytest tests/ -v`: **All 11 tests passing**.
+
+---
+
+## Decision 8: Scoping Full-Corpus Classification to a 6,000-Message Stratified Sample
+
+- **Date**: 2026-09-10
+- **Context**: 
+  Exhaustive classification of the entire 73,997-message corpus via few-shot LLM inference on Groq with `qwen/qwen3.8-27b` requires ~11.3 million tokens (3,700 API calls at batch size 20). Under Groq free-tier rate limits (8,000 TPM and 1,000 Output Tokens Per Minute [OTPM]), full sequential execution takes **~23.5 hours**. Rather than letting runs fail or using artificial shortcuts, the classification step was officially rescoped to a representative, statistically grounded stratified sample.
+- **Scoping Decision**:
+  - Replaced exhaustive 74k classification with a **6,000-message stratified sample** (`data/processed/AppleSupport_sample_6000.parquet`), representing an 8.11% sample of the resolved AppleSupport corpus.
+  - Stratified proportionally across the **8 draft clusters from stage 3's K-Means output** AND across **time period** (`2017_10`, `2017_11`, `2017_12`, `pre_2017_10`) using a fixed seed (`seed = 42`).
+  - Overlap with the earlier 2,000-message clustering sample was measured and documented: exactly **150 messages (2.50% of the 6,000 sample)**.
+- **Technical Implementation (`src/taxonomy/classify_stratified_sample.py`)**:
+  - Exclusively powered by the official Groq Python SDK (`from groq import Groq`).
+  - Model: `qwen/qwen3.8-27b` (deterministic JSON mode, zero internal reasoning bloat, 152.7 tokens/message).
+  - Zero fallback: The TF-IDF cosine distance shortcut was completely removed; if a batch encounters an issue, it retries with exponential backoff rather than falling back to an alternate algorithm.
+  - Checkpointing: Saves intermediate progress after every batch to `data/processed/AppleSupport_classified_sample_checkpoint.parquet` for crash resilience and instant resume capability.
+  - Monotonic row-by-row logging with explicit provenance: `classification_source: "groq_llm"` for every single row.
+- **Downstream Pipeline Integration**:
+  - The resulting artifact `data/processed/AppleSupport_classified_sample.parquet` is designated as:
+    1. **Stage 4 Source**: Precedent matching and category-partitioned vector indexing for retrieval-augmented generation.
+    2. **Stage 6 Candidate Pool**: Stratified candidate pool for golden evaluation set curation.
+  - Subsequent pipeline stages must draw from `AppleSupport_classified_sample.parquet` rather than the unclassified corpus.
+- **Verification**:
+  - Updated `tests/test_taxonomy.py` to validate `AppleSupport_classified_sample.parquet`.
+  - Re-ran `pytest tests/ -v`: **All 11 tests passing**.

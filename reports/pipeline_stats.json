@@ -110,5 +110,46 @@
     "always_escalate_pct": 17.0,
     "audit_note": "Audited and verified: Exclusively powered by Groq SDK. Replaced prior unverified TF-IDF / sample runs (14s/5-call runs superseded).",
     "recorded_at": "2026-09-10T09:51:35.377145+00:00"
+  },
+  "stage3_classified_stratified_sample": {
+    "status": "COMPLETED",
+    "provider": "Groq",
+    "model": "qwen/qwen3.8-27b",
+    "sample_size": 50,
+    "input_threads_path": "data/processed/AppleSupport_threads.parquet",
+    "stratified_sample_path": "data/processed/AppleSupport_sample_6000.parquet",
+    "classified_artifact_path": "data/processed/AppleSupport_classified_sample.parquet",
+    "classification_method": "few_shot_llm_groq_sdk",
+    "api_calls_made": 2,
+    "prompt_tokens": 5110,
+    "completion_tokens": 1399,
+    "total_tokens": 6509,
+    "avg_tokens_per_message": 130.18,
+    "estimated_cost_usd": 0.0016,
+    "duration_seconds": 43.73,
+    "class_distribution_counts": {
+      "software_update_os_bugs": 23,
+      "keyboard_text_autocorrect": 12,
+      "battery_power_performance": 5,
+      "hardware_display_physical": 4,
+      "account_access_apple_id": 2,
+      "apple_music_audio_playback": 2,
+      "orders_purchases_applecare": 1,
+      "international_multilingual_inquiries": 1
+    },
+    "class_distribution_percentages": {
+      "software_update_os_bugs": 46.0,
+      "keyboard_text_autocorrect": 24.0,
+      "battery_power_performance": 10.0,
+      "hardware_display_physical": 8.0,
+      "account_access_apple_id": 4.0,
+      "apple_music_audio_playback": 4.0,
+      "orders_purchases_applecare": 2.0,
+      "international_multilingual_inquiries": 2.0
+    },
+    "always_escalate_count": 4,
+    "always_escalate_pct": 8.0,
+    "scoping_decision": "Rescoped from exhaustive full-corpus classification (73,997 msgs, ~23.5hrs at 8,000 TPM) to a representative 6,000-message sample stratified across the 8 draft clusters and time period.",
+    "recorded_at": "2026-09-10T10:11:53.676100+00:00"
   }
 }
