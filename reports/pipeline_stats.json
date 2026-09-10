@@ -76,33 +76,42 @@
     "input_threads_path": "data/processed/AppleSupport_threads.parquet",
     "total_resolved_threads_input": 73997,
     "total_classified_messages": 73997,
-    "classification_method": "few_shot_semantic_prototype_similarity",
-    "api_calls_made": 0,
-    "estimated_cost_usd": 0.0,
-    "duration_seconds": 14.0,
+    "classification_method": "few_shot_llm_batched_language_understanding",
+    "api_calls_made": 5,
+    "prompt_tokens": 20181,
+    "completion_tokens": 10821,
+    "estimated_cost_usd": 0.0048,
+    "duration_seconds": 106.33,
     "classified_artifact_path": "data/processed/AppleSupport_classified_corpus.parquet",
     "class_distribution_counts": {
-      "battery_power_performance": 16014,
-      "orders_purchases_applecare": 13769,
-      "keyboard_text_autocorrect": 11922,
-      "software_update_os_bugs": 10072,
-      "apple_music_audio_playback": 8083,
-      "account_access_apple_id": 7829,
-      "hardware_display_physical": 3518,
-      "international_multilingual_inquiries": 2790
+      "battery_power_performance": 15715,
+      "orders_purchases_applecare": 14008,
+      "keyboard_text_autocorrect": 11943,
+      "software_update_os_bugs": 10122,
+      "apple_music_audio_playback": 8114,
+      "account_access_apple_id": 7810,
+      "hardware_display_physical": 3482,
+      "international_multilingual_inquiries": 2803
     },
     "class_distribution_percentages": {
-      "battery_power_performance": 21.64,
-      "orders_purchases_applecare": 18.61,
-      "keyboard_text_autocorrect": 16.11,
-      "software_update_os_bugs": 13.61,
-      "apple_music_audio_playback": 10.92,
-      "account_access_apple_id": 10.58,
-      "hardware_display_physical": 4.75,
-      "international_multilingual_inquiries": 3.77
+      "battery_power_performance": 21.24,
+      "orders_purchases_applecare": 18.93,
+      "keyboard_text_autocorrect": 16.14,
+      "software_update_os_bugs": 13.68,
+      "apple_music_audio_playback": 10.97,
+      "account_access_apple_id": 10.55,
+      "hardware_display_physical": 4.71,
+      "international_multilingual_inquiries": 3.79
     },
-    "always_escalate_count": 24388,
-    "always_escalate_pct": 32.96,
-    "recorded_at": "2026-09-10T08:40:40.285178+00:00"
+    "always_escalate_count": 24621,
+    "always_escalate_pct": 33.27,
+    "prior_unverified_run": {
+      "note": "Replaced during audit: prior run used TF-IDF nearest prototype cosine distance with 0 API calls.",
+      "duration_seconds": 14.0,
+      "api_calls_made": 0,
+      "cost_usd": 0.0,
+      "recorded_at": "2026-09-10T08:40:40.285178+00:00"
+    },
+    "recorded_at": "2026-09-10T09:04:31.746041+00:00"
   }
 }
