@@ -1,0 +1,27 @@
+# Raw dataset and large intermediate parquet outputs
+data/raw/
+data/raw/*
+data/processed/*.parquet
+
+# Python cache & build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter / exploratory notebooks cache
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/
+
+# Environment and IDE settings
+.env
+.venv/
+env/
+venv/
+.vscode/
+.idea/

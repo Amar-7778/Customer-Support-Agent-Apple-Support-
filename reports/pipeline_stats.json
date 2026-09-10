@@ -1,0 +1,74 @@
+{
+  "stage1_raw_ingestion": {
+    "raw_file_path": "data/raw/twcs.csv",
+    "total_rows": 2811774,
+    "inbound_count": 1537843,
+    "outbound_count": 1273931,
+    "inbound_pct": 54.69,
+    "outbound_pct": 45.31,
+    "date_range_min": "2008-05-08 20:13:59",
+    "date_range_max": "2017-12-03 23:14:01",
+    "null_counts": {
+      "tweet_id": 0,
+      "author_id": 0,
+      "inbound": 0,
+      "created_at": 0,
+      "text": 0,
+      "response_tweet_id": 1040629,
+      "in_response_to_tweet_id": 794335
+    },
+    "malformed_dates_count": 0,
+    "malformed_tweet_ids_count": 0,
+    "load_duration_seconds": 16.4,
+    "recorded_at": "2026-09-10T04:16:05.597153Z"
+  },
+  "stage1_thread_reconstruction": {
+    "output_path": "data/processed/threads.parquet",
+    "total_raw_rows_input": 2811774,
+    "total_threads": 798197,
+    "total_tweets_conserved": 2811774,
+    "conservation_check_passed": true,
+    "single_message_threads": 0,
+    "multi_message_threads": 798197,
+    "branching_threads": 129257,
+    "threads_with_brand_involved": 798197,
+    "min_thread_length": 2,
+    "max_thread_length": 1390,
+    "avg_thread_length": 3.52,
+    "reconstruction_duration_seconds": 47.17,
+    "recorded_at": "2026-09-10T04:16:52.783028Z"
+  },
+  "stage2_brand_filter_AppleSupport": {
+    "brand_handle": "AppleSupport",
+    "output_path": "data/processed/AppleSupport_threads.parquet",
+    "total_threads_reconstructed_input": 798197,
+    "brand_threads_count": 80717,
+    "brand_total_tweets_in_threads": 238907,
+    "avg_thread_length": 2.96,
+    "resolved_threads_count": 73997,
+    "resolved_pct": 91.67,
+    "unresolved_threads_count": 5850,
+    "unknown_threads_count": 870,
+    "resolution_reason_breakdown": {
+      "brand_final_reply_dormant_24h": 65501,
+      "customer_gratitude_confirmed_by_brand": 6023,
+      "pending_brand_reply": 5850,
+      "customer_gratitude_closure": 2473,
+      "brand_final_reply_recent_insufficient_observation_window": 870
+    },
+    "inactivity_hours_threshold": 24.0,
+    "duration_seconds": 10.09,
+    "recorded_at": "2026-09-10T04:18:16.432463Z"
+  },
+  "pipeline_summary": {
+    "status": "COMPLETED",
+    "brand_handle": "AppleSupport",
+    "total_elapsed_seconds": 157.64,
+    "total_raw_rows": 2811774,
+    "total_threads": 798197,
+    "brand_threads": 80717,
+    "brand_resolved_pct": 91.67,
+    "final_artifact": "data/processed/AppleSupport_threads.parquet",
+    "recorded_at": "2026-09-10T04:18:16.488050Z"
+  }
+}
