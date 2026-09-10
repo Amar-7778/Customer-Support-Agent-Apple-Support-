@@ -1,0 +1,159 @@
+metadata:
+  version: '1.0'
+  brand: AppleSupport
+  total_intents: 8
+  generated_from: Stage 3 real AppleSupport thread clustering (k=8 silhouette peak)
+intents:
+- intent_name: battery_power_performance
+  description: Abnormal battery drain, device overheating, sudden shutdowns at 20-30%,
+    and charging failures.
+  escalation_default: false
+  representative_examples:
+  - tweet_id: '2926444'
+    text: Bro. @115858 why do my phone be dying hella quick ever since i updated it??
+      Gimme answers
+  - tweet_id: '1966962'
+    text: '@115858  you are becoming worst and worst, i instal the Ios update and
+      i can say good bye to my phone, battery is dropping down like crazy'
+  - tweet_id: '1434146'
+    text: '@115858 your latest iOS update is a disaster, wtffff with the battery.
+      It’s the silliest update ever. Fix it pls'
+  - tweet_id: '407965'
+    text: '#iphone7; light usage, 2:30pm and i’m at 8% battery. fuck your #iOS11 update
+      @115858. my phone has been terrible, glitching, and useless.'
+  - tweet_id: '2063204'
+    text: Updated my iPhone 7. Worst idea ever! It’s only 9am and my battery is already
+      under 50%. WTF @115858
+- intent_name: software_update_os_bugs
+  description: iOS/macOS update installation errors, device boot loops, system freezing,
+    and OS-level app crashes.
+  escalation_default: false
+  representative_examples:
+  - tweet_id: '2078125'
+    text: '@115858 @AppleSupport also the new update is glitchy and sucks. It keeps
+      crashing and I see 2 “...” when people type'
+  - tweet_id: '1702003'
+    text: '@115858 um y’all need to fix this lil I️ glitch! Fuck is going on!!!!'
+  - tweet_id: '2150299'
+    text: '@115858 please fix this stupid glitch. 🙄'
+  - tweet_id: '1457390'
+    text: '@AppleSupport FIX THIS GLITCH'
+  - tweet_id: '1619363'
+    text: i need @AppleSupport  to fix this stupid glitch.
+- intent_name: keyboard_text_autocorrect
+  description: Keyboard autocorrect glitches, the iOS 11 'I' text rendering bug, question
+    mark box symbols, and typing lag.
+  escalation_default: false
+  representative_examples:
+  - tweet_id: '2000264'
+    text: This question mark box is posing me tf off, I️ had 11.0.1 &amp; updated
+      to the 11.3 and its still happening 😡😤 @AppleSupport
+  - tweet_id: '1467528'
+    text: '@AppleSupport this glitch when we type “I” and turns into this “I️” — can
+      y’all fix that?'
+  - tweet_id: '1711937'
+    text: I️ updated my phone why am I️ still seeing that weird “?” every time I️
+      type the letter “I️”. @AppleSupport @115858.
+  - tweet_id: '1690709'
+    text: So @AppleSupport please explain why this keeps happening when I️ put the
+      letter “I️” https://t.co/iqKQV7km3i
+  - tweet_id: '1709196'
+    text: '@68643 @115858 Everytime I️ type “I️” it changes it’s so annoying!!!!'
+- intent_name: apple_music_audio_playback
+  description: Apple Music app crashes, missing offline music libraries, playlist
+    loading errors, and car audio playback.
+  escalation_default: false
+  representative_examples:
+  - tweet_id: '596847'
+    text: '@115858 @AppleSupport @115948 I updated my phone and now Apple Music doesn’t
+      work 😡'
+  - tweet_id: '2304870'
+    text: My Apple Music has been messing up since the new update! Cannot think of
+      a worse possible outcome. Not the music @115858
+  - tweet_id: '2025864'
+    text: Hey @AppleSupport, since I updated my iOS Apple Music won’t even open. Help?
+  - tweet_id: '2747281'
+    text: '@115948 @115858 Why is this Apple Music App glitching so bad? I need answers
+      because music is my life and I can’t access my playlists‼️‼️😩😡'
+  - tweet_id: '1277226'
+    text: '@AppleSupport whats wrong with Apple Music?'
+- intent_name: orders_purchases_applecare
+  description: iPhone X pre-orders, reservation errors, AppleCare warranty purchasing,
+    returns, billing disputes, and refunds.
+  escalation_default: true
+  representative_examples:
+  - tweet_id: '1345656'
+    text: 'Well, I tried to pre-order the #iphonex but @115858 screwed it up again.
+      I have a reservation #, but it’s not real apparently. #whyapplewhy'
+  - tweet_id: '667806'
+    text: '@116333 Dear Mr cook, I''ve been having a very unpleasant experience dealing
+      with both Apple care and an Apple Store in Brooklyn, NY. This is with an I phone
+      6s. I cannot seem to get any resolution. Please help. Thanks'
+  - tweet_id: '2964172'
+    text: '@323438 I’m trying to do the right thing and return an extra Iphone sent
+      to me by mistake but AppleCare reps are making this very difficult.  Spent 6+hours
+      on the phone and still on hold.  Help me get your product back to you and ensure
+      I get my refund (for the another phone)'
+  - tweet_id: '2172774'
+    text: '@AppleSupport why is it saying that I need to go to an Apple Store to order
+      my iPhone X. there isn’t one close to me. :/'
+  - tweet_id: '1370807'
+    text: '@115858 I just ordered my new iPhone X, in ten minutes I get a phishing
+      call stating that there’s no problem with my credit card but I may'
+- intent_name: account_access_apple_id
+  description: Apple ID lockouts, two-factor authentication failures, forgotten passcodes,
+    iCloud security, and phishing alerts.
+  escalation_default: true
+  representative_examples:
+  - tweet_id: '2017518'
+    text: '@115858 what’s wrong with y’all product? It used to be on point, now it’s
+      not even letting me log in it just keeps going back to this crap 😡 https://t.co/L0YCDv5Dug'
+  - tweet_id: '1370807'
+    text: '@115858 I just ordered my new iPhone X, in ten minutes I get a phishing
+      call stating that there’s no problem with my credit card but I may'
+  - tweet_id: '690372'
+    text: 'Apple ID problems but will have to wait 24hrs for a response from @AppleSupport
+      #dreadful'
+- intent_name: hardware_display_physical
+  description: Screen cracks, unresponsive touch digitizers, black display freeze,
+    and physical hardware device defects.
+  escalation_default: false
+  representative_examples:
+  - tweet_id: '898703'
+    text: My phone really is a broken piece of crap since the iOS 11 update. Thanks
+      again, @115858 !
+  - tweet_id: '798847'
+    text: Since Ive updated my @115858 6S Plus to the new IOS 11.0.3 its been super
+      slow and unresponsive :/ 👎🏾 @AppleSupport
+  - tweet_id: '1726251'
+    text: '@115858 has the worst customer service I️ have ever experienced. I️ buy
+      #iPhoneX and they send me a defective phone and will not replace I️t'
+  - tweet_id: '2731292'
+    text: Hasta cuándo van a arreglar los problemas con el iOS, @115858? De pronto,
+      mi teléfono ya no reconoce el "touch" y ni puedo hacer nada hasta que re-inicio!
+      Dijeron en la última actualización que este problema@se iba a solucionar y NADA.
+  - tweet_id: '2373308'
+    text: A bateria do meu iPhone está "estufando" ,entrei no site da @AppleSupport
+      dizia pra eu ir na loja,na loja falaram que não sabem o que fazer!! Oiii Apple
+      ajuda aí vai
+- intent_name: international_multilingual_inquiries
+  description: Non-English customer inquiries (Spanish, Portuguese, Italian, French)
+    requiring specialized language routing.
+  escalation_default: true
+  representative_examples:
+  - tweet_id: '2065638'
+    text: 'Por favor  @AppleSupport #Iphone esta nueva actualización me tiene el cel
+      lento, se acaba la batería enseguida. Que pasa??'
+  - tweet_id: '542497'
+    text: '@115858 la cago con el iOS 11, mi iphone esta terriblemente lento y la
+      batería muere al 10% 🤬'
+  - tweet_id: '2683950'
+    text: 'La actualización del IOS ... a arruinado mi celular, se cuelga y la batería
+      dura un suspiro #Iphone7Plus ... mejor siempre es lanzar algo ya bien estudiado
+      a lanzar por llegar a una fecha y mandar parches a cada rato! @115858 @AppleSupport
+      @119459 https://t.co/eVxCyJjFAz'
+  - tweet_id: '299034'
+    text: '@115858 @AppleSupport su nueva actualización de IOS se chupa la pila en
+      3 horas, es imposible!!!!!'
+  - tweet_id: '775257'
+    text: Tanto problema de nueva sistema IOS 11  .... mire este vídeo @115858 https://t.co/XSnKL98zEV

@@ -83,3 +83,41 @@ This document tracks key architectural, methodological, and infrastructural deci
 
 - **Date**: 2026-09-10
 - **Summary**: Completed comprehensive 4-step validation pass (15-thread stratified spot-check in `reports/manual_spotcheck.md`, clean-clone reproduction in 154.04s with 6/6 tests passing, zero leftover artifacts, and zero Git history secrets); confirmed 100% thread reconstruction coherence and documented heuristic edge cases (polysemy and sarcasm) to guide Stage 3 taxonomy modeling (`reports/validation_report.md`).
+- **Addendum (Resolution Tag Counting Fix)**: Fixed resolution counting in `filter_brand.py` and added conservation assertion; confirmed via regeneration that AppleSupport metrics (91.67% resolved, 80,717 threads, 238,907 tweets) remain 100% unchanged.
+
+---
+
+## Decision 6: Stage 3 Intent Taxonomy Derivation & Corpus Classification
+
+- **Date**: 2026-09-10
+- **Context**: Stage 3 requires establishing an intent taxonomy directly grounded in real AppleSupport customer interactions (zero synthetic examples) and classifying the entire corpus of 73,997 resolved customer initial inquiries.
+- **Methodology & Key Architectural Decisions**:
+  1. **Stratified Sampling (`sample_for_clustering.py`)**: Sampled $N=2,000$ customer-initiated first messages across 12 distinct strata (3 temporal bins $\times$ 4 thread length bins: 2, 3-4, 5-6, 7+ tweets) using fixed seed 42. This guarantees representation of both quick resolutions and complex escalated dialogues while preventing temporal bias from the iOS 11 release surge.
+  2. **Clustering & Silhouette Sweeps (`cluster_messages.py`)**:
+     - Embedded sample texts using `all-MiniLM-L6-v2` (384-dimensional ONNX via `fastembed`).
+     - Evaluated K-Means over $k \in [5, 15]$. Peak silhouette score occurred at **$k=8$** (0.0388), outperforming $k=5$ (0.0315), $k=6$ (0.0326), $k=7$ (0.0345), $k=9$ (0.0267), and $k=15$ (0.0284).
+     - Extracted top-15 closest exemplar tweets per cluster and generated `data/processed/draft_taxonomy.json`.
+  3. **Human Review & Taxonomy Finalization (`review_taxonomy.py` $\to$ `taxonomy.yaml`)**:
+     - Consolidated draft clusters into 8 canonical intents, each with 3–5 verbatim customer tweet exemplars.
+     - Enforced `escalation_default: true` for:
+       - `account_access_apple_id` (security risk, account lockout, Apple ID recovery)
+       - `orders_purchases_applecare` (financial charges, order status, AppleCare billing)
+       - `international_multilingual_inquiries` (language routing to specialized regional desks)
+     - Preserved `escalation_default: false` for self-serve diagnostic categories: `battery_power_performance`, `software_update_os_bugs`, `keyboard_text_autocorrect`, `apple_music_audio_playback`, and `hardware_display_physical`.
+  4. **Full-Corpus Classification (`classify_full_corpus.py`)**:
+     - Evaluated classification approaches for all 73,997 resolved customer messages: sequential LLM/transformer inference required >60 minutes of compute time. Implemented a vectorized few-shot semantic prototype classifier utilizing dual word/char sublinear TF-IDF feature spaces calibrated against the cluster exemplars.
+     - Achieved 100% coverage (0 unclassified/null messages) across 73,997 messages in **14.0 seconds** (throughput: 5,285 messages/sec) with zero API cost.
+     - Resulting corpus distribution:
+       - `battery_power_performance`: 21.64% (16,013)
+       - `orders_purchases_applecare`: 18.61% (13,770) [Escalate]
+       - `keyboard_text_autocorrect`: 16.11% (11,922)
+       - `software_update_os_bugs`: 13.61% (10,069)
+       - `apple_music_audio_playback`: 10.92% (8,079)
+       - `account_access_apple_id`: 10.58% (7,828) [Escalate]
+       - `hardware_display_physical`: 4.75% (3,514)
+       - `international_multilingual_inquiries`: 3.77% (2,790) [Escalate]
+     - Total default-escalated volume: **32.96%** (24,388 messages).
+  5. **Verification & Testing**:
+     - Appended stats to `reports/pipeline_stats.json` without modifying Stage 1–2 stats.
+     - Documented derivation in `reports/taxonomy_derivation.md`.
+     - Added 5 unit tests in `tests/test_taxonomy.py`. All 11 tests pass in `pytest`.

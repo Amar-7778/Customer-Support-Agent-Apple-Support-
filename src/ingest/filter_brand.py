@@ -258,9 +258,13 @@ def filter_brand_threads(
 
     # Compute brand-level statistics
     total_tweets = int(filtered_df["thread_length"].sum())
-    resolved_count = int((filtered_df["resolved"] == "true").sum())
-    unresolved_count = int((filtered_df["resolved"] == "false").sum())
-    unknown_count = int((filtered_df["resolved"] == "unknown").sum())
+    resolved_count = resolved_tags.count("true")
+    unresolved_count = resolved_tags.count("false")
+    unknown_count = resolved_tags.count("unknown")
+    assert resolved_count + unresolved_count + unknown_count == num_brand_threads, (
+        f"Resolution tags count mismatch: {resolved_count} resolved + {unresolved_count} unresolved + "
+        f"{unknown_count} unknown = {resolved_count + unresolved_count + unknown_count} != {num_brand_threads} threads"
+    )
     pct_resolved = round(100.0 * resolved_count / num_brand_threads, 2) if num_brand_threads > 0 else 0.0
 
     reason_distribution = filtered_df["resolution_reason"].value_counts().to_dict()

@@ -57,8 +57,8 @@
       "brand_final_reply_recent_insufficient_observation_window": 870
     },
     "inactivity_hours_threshold": 24.0,
-    "duration_seconds": 10.09,
-    "recorded_at": "2026-09-10T04:18:16.432463Z"
+    "duration_seconds": 11.04,
+    "recorded_at": "2026-09-10T08:20:23.535130Z"
   },
   "pipeline_summary": {
     "status": "COMPLETED",
@@ -70,5 +70,39 @@
     "brand_resolved_pct": 91.67,
     "final_artifact": "data/processed/AppleSupport_threads.parquet",
     "recorded_at": "2026-09-10T04:18:16.488050Z"
+  },
+  "stage3_intent_taxonomy": {
+    "status": "COMPLETED",
+    "input_threads_path": "data/processed/AppleSupport_threads.parquet",
+    "total_resolved_threads_input": 73997,
+    "total_classified_messages": 73997,
+    "classification_method": "few_shot_semantic_prototype_similarity",
+    "api_calls_made": 0,
+    "estimated_cost_usd": 0.0,
+    "duration_seconds": 14.0,
+    "classified_artifact_path": "data/processed/AppleSupport_classified_corpus.parquet",
+    "class_distribution_counts": {
+      "battery_power_performance": 16014,
+      "orders_purchases_applecare": 13769,
+      "keyboard_text_autocorrect": 11922,
+      "software_update_os_bugs": 10072,
+      "apple_music_audio_playback": 8083,
+      "account_access_apple_id": 7829,
+      "hardware_display_physical": 3518,
+      "international_multilingual_inquiries": 2790
+    },
+    "class_distribution_percentages": {
+      "battery_power_performance": 21.64,
+      "orders_purchases_applecare": 18.61,
+      "keyboard_text_autocorrect": 16.11,
+      "software_update_os_bugs": 13.61,
+      "apple_music_audio_playback": 10.92,
+      "account_access_apple_id": 10.58,
+      "hardware_display_physical": 4.75,
+      "international_multilingual_inquiries": 3.77
+    },
+    "always_escalate_count": 24388,
+    "always_escalate_pct": 32.96,
+    "recorded_at": "2026-09-10T08:40:40.285178+00:00"
   }
 }

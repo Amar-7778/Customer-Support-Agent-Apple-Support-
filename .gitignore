@@ -2,6 +2,9 @@
 data/raw/
 data/raw/*
 data/processed/*.parquet
+data/processed/*.json
+data/processed/*.npy
+*.npy
 
 # Python cache & build artifacts
 __pycache__/
