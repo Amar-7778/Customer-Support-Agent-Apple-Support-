@@ -4,6 +4,7 @@ data/raw/*
 data/processed/*.parquet
 data/processed/*.json
 data/processed/*.npy
+data/processed/chroma_db/
 *.npy
 
 # Python cache & build artifacts

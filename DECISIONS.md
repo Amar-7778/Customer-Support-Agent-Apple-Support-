@@ -233,3 +233,60 @@ This document tracks key architectural, methodological, and infrastructural deci
   - Stage 3 is officially 100% complete and certified.
   - Stage 4 (Retrieval & Precedent Matching in `src/retrieval/`) is unblocked and ready for implementation.
 
+---
+
+## Decision 10: Stage 4 Golden Holdout Partitioning, Structured Precedent Extraction via Groq LLM, ChromaDB Vector Indexing, and Precedent-Agreement Scoring
+
+- **Date**: 2026-09-12
+- **Context**:
+  To ground customer support agent replies in verifiable historical precedents without hallucinating troubleshooting instructions, Stage 4 establishes a retrieval index over historical AppleSupport resolution trajectories. The input is the verified 6,000-message Groq-classified dataset (`data/processed/AppleSupport_classified_sample.parquet`) joined to reconstructed Twitter threads (`data/processed/AppleSupport_threads.parquet`).
+- **Core Constraints Enforced**:
+  - **Zero Provider Leakage**: Groq (`qwen/qwen3.8-27b`) is the exclusive inference provider. Zero OpenAI, Gemini, or Anthropic.
+  - **Zero Data Leakage**: Permanent holdout partition of ~300 threads strictly excluded from the retrieval pool before index construction.
+  - **Zero Synthetic Data / Fallback**: All 400 precedent records extracted via genuine Groq SDK calls with real token/cost tracking.
+- **Key Architectural Decisions & Implementation**:
+  1. **Golden Evaluation Holdout Partition (`src/retrieval/holdout_split.py`)**:
+     - Partitioned exactly **300 threads** into `data/processed/golden_eval_candidates.parquet`, stratified across all 8 intents ($k=42$ random seed).
+     - Remaining 5,700 threads isolated in `data/processed/indexable_precedents_input.parquet`.
+     - Hardened zero-leakage assertion: $\text{holdout} \cap \text{indexable} = \emptyset$ strictly enforced in code and unit tests.
+  2. **Structured Precedent Extraction via Groq (`src/retrieval/complete_precedent_extraction.py`)**:
+     - Extracted `{thread_id, tweet_id, intent, customer_message, action_taken, outcome, brand_reply_text, extraction_source}` using few-shot structured prompting (`qwen/qwen3.8-27b`, JSON mode, `max_tokens=800`).
+     - Standardized outcomes into 6 categories: `transferred_to_dm`, `directed_to_support_link`, `troubleshooting_steps_provided`, `clarification_requested`, `escalated_to_apple_store`, `information_provided`.
+     - Handled Groq free-tier rate limits (8,000 TPM, 200,000 TPD) with organization-aware failover and automatic SDK backoff pacing (4 threads/batch, 5.5s inter-batch pause).
+     - **Verified Empirical Metrics**:
+       - Output Artifact: `data/processed/structured_precedents.parquet` (**400 precedents**, 0 nulls, 0 empty strings).
+       - Total Groq API Calls: **60 calls**
+       - Prompt Tokens: **81,986 tokens**
+       - Completion Tokens: **23,907 tokens**
+       - Total Tokens: **105,893 tokens** (average **264.7 tokens/precedent**)
+       - Compute Cost: **$0.0266 USD** ($0.15/1M prompt, $0.60/1M completion)
+       - Extraction Source: **100.0% `groq_llm`** (0 synthetic / 0 fallback)
+       - Outcome Distribution: `transferred_to_dm` (208, 52.0%), `directed_to_support_link` (88, 22.0%), `troubleshooting_steps_provided` (60, 15.0%), `clarification_requested` (34, 8.5%), `information_provided` (10, 2.5%).
+       - Intent Distribution: `software_update_os_bugs` (225), `keyboard_text_autocorrect` (30), `battery_power_performance` (30), `hardware_display_physical` (25), `orders_purchases_applecare` (25), `account_access_apple_id` (25), `apple_music_audio_playback` (20), `international_multilingual_inquiries` (20).
+  3. **ChromaDB Vector Index Builder (`src/retrieval/build_index.py`)**:
+     - Embedded composite representation (`Customer: <cleaned_text> | Action: <action_taken>`) via FastEmbed ONNX `sentence-transformers/all-MiniLM-L6-v2` (384-dimensional dense vectors).
+     - Persisted in local ChromaDB collection `apple_support_precedents` at `data/processed/chroma_db` using Cosine space (`hnsw:space: cosine`).
+     - Stored full metadata (`intent`, `action_taken`, `outcome`, `brand_reply_text`, `tweet_id`, `thread_id`) to allow instant zero-overhead retrieval.
+     - Verified zero-leakage: 0 / 300 holdout threads overlap with ChromaDB index.
+  4. **Query Interface & Precedent-Agreement Scoring (`src/retrieval/query_index.py`)**:
+     - `retrieve_precedents(message, intent, k=5)`:
+       1. Filters candidates strictly by `where={"intent": intent}` metadata prior to ANN distance ranking.
+       2. Computes cosine similarity scores $\text{sim} = 1 - \text{cosine\_distance}$.
+       3. Calculates blended `precedent_agreement_score`:
+          $$\text{score} = 0.60 \times \left(\frac{1}{k}\sum_{i=1}^k \mathbb{I}[\cos(\mathbf{a}_i, \mathbf{a}_1) \ge 0.65]\right) + 0.40 \times \left(\frac{\max_c \text{count}(c)}{k}\right)$$
+          Combines action semantic cosine consistency to rank 1 action with modal outcome category consensus. Feeds directly into Stage 5 escalation logic (low agreement triggers human escalation).
+  5. **Human Spot-Check Audit (`reports/spotcheck_retrieval.md`)**:
+     - Evaluated 10 real inquiries from the golden holdout pool across all 8 intents.
+     - Audited top-3 retrieved precedents side-by-side against each customer inquiry.
+     - Confirmed high semantic relevance and factual grounding: e.g. Portuguese inquiries retrieved Portuguese language routing precedents; iPhone battery drain inquiries retrieved verified iOS version diagnostic steps.
+  6. **Automated Test Suite (`tests/test_retrieval.py`)**:
+     - `test_golden_holdout_stratification_and_conservation`: Asserts exact 300 rows, all 8 intents represented.
+     - `test_holdout_zero_overlap_with_indexable_and_index`: Asserts zero overlap with indexable pool, parquet precedents, and ChromaDB collection.
+     - `test_precedent_agreement_scoring_bounds`: Asserts agreement scores remain in $[0.0, 1.0]$, verifies high agreement for consistent actions ($\ge 0.95$) and low agreement for divergent actions.
+     - `test_retrieval_intent_filtering_and_schema`: Asserts query filtering strictly respects intent metadata boundary.
+     - Full test suite: **14 / 14 tests passing** across the repository.
+- **Downstream Impact**:
+  - Stage 4 is 100% complete and verified.
+  - The retrieval index is ready to feed grounded precedents and agreement scores into Stage 5 (Agent Architecture & Escalation Decision Logic).
+
+

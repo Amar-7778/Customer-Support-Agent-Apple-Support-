@@ -151,5 +151,55 @@
     "always_escalate_pct": 15.48,
     "scoping_decision": "Rescoped from exhaustive full-corpus classification (73,997 msgs, ~23.5hrs at 8,000 TPM) to a representative 6,000-message sample stratified across the 8 draft clusters and time period.",
     "recorded_at": "2026-09-12T04:12:50.172901+00:00"
+  },
+  "stage4_precedent_extraction": {
+    "status": "COMPLETED",
+    "provider": "Groq",
+    "model": "qwen/qwen3.8-27b",
+    "input_indexable_pool_size": 5700,
+    "golden_holdout_size": 300,
+    "extracted_precedents_count": 400,
+    "extraction_method": "few_shot_structured_llm_groq_sdk",
+    "api_calls_made": 60,
+    "prompt_tokens": 81986,
+    "completion_tokens": 23907,
+    "total_tokens": 105893,
+    "avg_tokens_per_precedent": 264.73,
+    "estimated_cost_usd": 0.0266,
+    "duration_seconds": 6520.67,
+    "outcome_distribution": {
+      "transferred_to_dm": 208,
+      "directed_to_support_link": 88,
+      "troubleshooting_steps_provided": 60,
+      "clarification_requested": 34,
+      "information_provided": 10
+    },
+    "intent_distribution": {
+      "software_update_os_bugs": 225,
+      "keyboard_text_autocorrect": 30,
+      "battery_power_performance": 30,
+      "hardware_display_physical": 25,
+      "orders_purchases_applecare": 25,
+      "account_access_apple_id": 25,
+      "apple_music_audio_playback": 20,
+      "international_multilingual_inquiries": 20
+    },
+    "recorded_at": "2026-09-12T07:19:13.573380+00:00"
+  },
+  "stage4_retrieval_index": {
+    "status": "COMPLETED",
+    "vector_store": "ChromaDB",
+    "collection_name": "apple_support_precedents",
+    "chroma_dir": "data/processed/chroma_db",
+    "total_indexed_precedents": 400,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "embedding_dimension": 384,
+    "embedding_framework": "fastembed (ONNX runtime)",
+    "distance_metric": "cosine",
+    "zero_leakage_verified": true,
+    "golden_eval_holdout_size": 300,
+    "golden_holdout_overlap": 0,
+    "precedent_agreement_scoring": "blended (60% action semantic cosine + 40% modal outcome consistency)",
+    "recorded_at": "2026-09-12T07:21:17.673444+00:00"
   }
 }
