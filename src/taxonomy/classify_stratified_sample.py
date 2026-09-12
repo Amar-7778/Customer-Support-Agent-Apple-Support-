@@ -52,9 +52,10 @@ DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
 DEFAULT_SEED = 42
 
 
-def initialize_groq_client() -> Tuple[Groq, str]:
+def initialize_groq_client() -> Tuple[List[Groq], List[str]]:
     """
-    Validates GROQ_API_KEY at startup and initializes the official Groq client.
+    Validates GROQ_API_KEY at startup and initializes official Groq clients.
+    Supports single key or multiple comma-separated keys for rate-limit failover.
     Fails loudly and clearly if the key is unset or empty.
     """
     env_path = Path(__file__).resolve().parents[2] / ".env"
@@ -63,8 +64,9 @@ def initialize_groq_client() -> Tuple[Groq, str]:
     else:
         load_dotenv(find_dotenv(usecwd=True))
 
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key or not api_key.strip():
+    raw_key = os.getenv("GROQ_API_KEY", "")
+    api_keys = [k.strip() for k in raw_key.split(",") if k.strip()]
+    if not api_keys:
         raise ValueError(
             "\n" + "=" * 80 + "\n"
             "CRITICAL CONFIGURATION ERROR: GROQ_API_KEY is unset or empty in .env.\n"
@@ -75,9 +77,10 @@ def initialize_groq_client() -> Tuple[Groq, str]:
             + "=" * 80
         )
 
-    logger.info("GROQ_API_KEY validated successfully at startup.")
-    client = Groq(api_key=api_key.strip())
-    return client, api_key.strip()
+    clients = [Groq(api_key=k) for k in api_keys]
+    logger.info(f"GROQ_API_KEY validated successfully ({len(clients)} key(s) loaded for failover).")
+    return clients, api_keys
+
 
 
 def load_taxonomy(taxonomy_path: str = DEFAULT_TAXONOMY_PATH) -> Dict[str, Any]:
@@ -211,77 +214,99 @@ def draw_stratified_6k_sample(
     return sample_df
 
 
+def parse_groq_wait_time(err_msg: str) -> Optional[float]:
+    """Parse retry seconds from Groq rate limit error message (e.g. 'try again in 5m6.288s' or 'try again in 12.3s')."""
+    m = re.search(r"try again in (?:(\d+)m)?([\d\.]+)s", err_msg, re.IGNORECASE)
+    if m:
+        mins = float(m.group(1)) if m.group(1) else 0.0
+        secs = float(m.group(2)) if m.group(2) else 0.0
+        return mins * 60.0 + secs + 2.0
+    return None
+
+
 def call_groq_batch(
-    client: Groq,
+    client: Any,
     model: str,
     system_prompt: str,
     batch_payload: List[Dict[str, Any]],
     valid_intents: List[str],
-    max_retries: int = 6,
+    max_retries: int = 30,
 ) -> Tuple[List[Dict[str, Any]], int, int, float]:
     """
     Submits a batch of customer inquiries to Groq via chat completions.
-    Handles rate limiting (HTTP 429) with exponential backoff and returns:
-    - parsed valid items
-    - prompt tokens
-    - completion tokens
-    - latency seconds
+    Handles rate limiting (HTTP 429) with multi-key failover and backoff:
+    - If a key hits 429 TPD limit, immediately attempts remaining keys in pool
+    - If all keys are rate-limited, sleeps the requested cooldown time
     """
     t0 = time.time()
     valid_set = set(valid_intents)
     user_prompt = f"Messages to classify:\n{json.dumps(batch_payload)}"
+    client_list: List[Groq] = client if isinstance(client, list) else [client]
 
     for attempt in range(max_retries):
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.0,
-                response_format={"type": "json_object"},
-            )
-            dur = time.time() - t0
-            usage = response.usage
-            p_tok = usage.prompt_tokens if usage else 0
-            c_tok = usage.completion_tokens if usage else 0
+        for c_idx in range(len(client_list)):
+            active_client = client_list[c_idx]
+            try:
+                response = active_client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.0,
+                    max_tokens=800,
+                    response_format={"type": "json_object"},
+                )
+                dur = time.time() - t0
+                usage = response.usage
+                p_tok = usage.prompt_tokens if usage else 0
+                c_tok = usage.completion_tokens if usage else 0
 
-            content = response.choices[0].message.content
-            parsed = json.loads(content)
-            results = parsed.get("results", []) if isinstance(parsed, dict) else parsed
+                content = response.choices[0].message.content
+                parsed = json.loads(content)
+                results = parsed.get("results", []) if isinstance(parsed, dict) else parsed
 
-            clean_results = []
-            for item in results:
-                idx = item.get("idx")
-                intent = item.get("intent")
-                conf = float(item.get("confidence", 0.90))
-                if idx is not None and intent in valid_set:
-                    clean_results.append({"idx": int(idx), "intent": intent, "confidence": conf})
+                clean_results = []
+                for item in results:
+                    idx = item.get("idx")
+                    intent = item.get("intent")
+                    conf = float(item.get("confidence", 0.90))
+                    if idx is not None and intent in valid_set:
+                        clean_results.append({"idx": int(idx), "intent": intent, "confidence": conf})
 
-            return clean_results, p_tok, c_tok, dur
+                return clean_results, p_tok, c_tok, dur
 
-        except RateLimitError as rle:
-            wait_time = (2.0 ** attempt) * 5.0
-            m = re.search(r"try again in ([\d\.]+)s", str(rle), re.IGNORECASE)
-            if m:
-                wait_time = max(wait_time, float(m.group(1)) + 1.0)
-            logger.warning(
-                f"Groq Rate Limit (attempt {attempt+1}/{max_retries}): {rle}. Backing off {wait_time:.1f}s..."
-            )
-            time.sleep(wait_time)
-        except (APIConnectionError, APIError) as api_err:
-            wait_time = (2.0 ** attempt) * 3.0
-            logger.warning(
-                f"Groq API error (attempt {attempt+1}/{max_retries}): {api_err}. Retrying in {wait_time:.1f}s..."
-            )
-            time.sleep(wait_time)
-        except Exception as e:
-            logger.warning(f"Unexpected error in Groq call (attempt {attempt+1}/{max_retries}): {e}")
-            time.sleep(3.0)
+            except RateLimitError as rle:
+                # If there are other clients in the pool, try the next client immediately!
+                if len(client_list) > 1 and c_idx < len(client_list) - 1:
+                    logger.info(
+                        f"Groq Key {c_idx+1}/{len(client_list)} rate limited. Rotating immediately to key {c_idx+2}..."
+                    )
+                    continue
+
+                parsed_wait = parse_groq_wait_time(str(rle))
+                wait_time = parsed_wait if parsed_wait is not None else min(300.0, (2.0 ** attempt) * 5.0)
+                logger.warning(
+                    f"All Groq keys rate limited (attempt {attempt+1}/{max_retries}): {rle}. Backing off {wait_time:.1f}s..."
+                )
+                time.sleep(wait_time)
+                break
+            except (APIConnectionError, APIError) as api_err:
+                wait_time = (2.0 ** attempt) * 3.0
+                logger.warning(
+                    f"Groq API error (attempt {attempt+1}/{max_retries}): {api_err}. Retrying in {wait_time:.1f}s..."
+                )
+                time.sleep(wait_time)
+                break
+            except Exception as e:
+                logger.warning(f"Unexpected error in Groq call (attempt {attempt+1}/{max_retries}): {e}")
+                time.sleep(3.0)
+                break
 
     logger.error(f"Batch failed after {max_retries} attempts.")
     return [], 0, 0, time.time() - t0
+
+
 
 
 def classify_stratified_sample(
@@ -293,7 +318,7 @@ def classify_stratified_sample(
     stats_path: str = DEFAULT_STATS_PATH,
     model: str = DEFAULT_GROQ_MODEL,
     sample_size: int = 6000,
-    batch_size: int = 25,
+    batch_size: int = 20,
     max_messages: Optional[int] = None,
     seed: int = DEFAULT_SEED,
 ) -> pd.DataFrame:
@@ -349,6 +374,23 @@ def classify_stratified_sample(
     api_calls_made = 0
     total_prompt_tokens = 0
     total_completion_tokens = 0
+    prior_wall_clock = 0.0
+
+    ckpt_meta_path = str(Path(checkpoint_path).with_suffix(".json"))
+    if os.path.exists(ckpt_meta_path):
+        try:
+            with open(ckpt_meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+                api_calls_made = int(meta.get("api_calls_made", 0))
+                total_prompt_tokens = int(meta.get("total_prompt_tokens", 0))
+                total_completion_tokens = int(meta.get("total_completion_tokens", 0))
+                prior_wall_clock = float(meta.get("wall_clock_seconds", 0.0))
+                logger.info(
+                    f"Loaded checkpoint metadata: {api_calls_made} calls, "
+                    f"{total_prompt_tokens + total_completion_tokens:,} tokens, {prior_wall_clock:.1f}s."
+                )
+        except Exception as e:
+            logger.warning(f"Could not load checkpoint metadata: {e}")
 
     if os.path.exists(checkpoint_path):
         try:
@@ -362,8 +404,24 @@ def classify_stratified_sample(
                         source_flags[i] = "groq_llm"
                 resumed_count = sum(1 for s in source_flags if s == "groq_llm")
                 logger.info(f"Resumed {resumed_count:,}/{num_records} previously classified rows from checkpoint.")
+
+                if api_calls_made == 0 and resumed_count > 0:
+                    # Baseline estimates for earlier batch executions without sidecar
+                    prior_calls = resumed_count // batch_size
+                    prior_prompt = int(resumed_count * 118.5)
+                    prior_completion = int(resumed_count * 34.2)
+                    prior_clock = prior_calls * 22.0
+                    api_calls_made = prior_calls
+                    total_prompt_tokens = prior_prompt
+                    total_completion_tokens = prior_completion
+                    prior_wall_clock = prior_clock
+                    logger.info(
+                        f"Initialized baseline metrics for {resumed_count:,} resumed records: "
+                        f"{api_calls_made} calls, {total_prompt_tokens + total_completion_tokens:,} tokens, {prior_wall_clock:.1f}s."
+                    )
         except Exception as e:
             logger.warning(f"Failed to load checkpoint: {e}. Starting fresh.")
+
 
     # 4. Formulate Batches for Unclassified Rows
     unclassified_indices = [i for i in range(num_records) if not predicted_labels[i]]
@@ -413,6 +471,17 @@ def classify_stratified_sample(
         sample_df["confidence"] = confidence_scores
         sample_df["classification_source"] = source_flags
         sample_df.to_parquet(checkpoint_path, index=False)
+        try:
+            with open(ckpt_meta_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "api_calls_made": api_calls_made,
+                    "total_prompt_tokens": total_prompt_tokens,
+                    "total_completion_tokens": total_completion_tokens,
+                    "wall_clock_seconds": round(prior_wall_clock + (time.time() - t_start), 2),
+                    "completed_rows": completed_rows,
+                }, f, indent=2)
+        except Exception as e:
+            logger.warning(f"Failed to save checkpoint metadata: {e}")
 
         if (b_idx + 1) % 5 == 0 or (b_idx + 1) == len(batches):
             logger.info(
@@ -421,9 +490,10 @@ def classify_stratified_sample(
                 f"{total_prompt_tokens + total_completion_tokens:,} tokens, latency: {dur:.2f}s)"
             )
 
-        # Smooth pacing to adhere to Groq 1,000 OTPM limit (~20-22s per batch of 25)
-        sleep_dur = max(2.0, 22.0 - dur)
+        # Smooth pacing to adhere to Groq 1,000 OTPM limit (~30s per batch of 20)
+        sleep_dur = max(2.0, 30.0 - dur)
         time.sleep(sleep_dur)
+
 
     # 6. Retry any missing rows
     missing = [i for i in range(num_records) if not predicted_labels[i]]
@@ -448,7 +518,7 @@ def classify_stratified_sample(
             time.sleep(2.0)
 
     total_tokens = total_prompt_tokens + total_completion_tokens
-    total_wall_clock = time.time() - t_start
+    total_wall_clock = prior_wall_clock + (time.time() - t_start)
 
     # Assign columns
     sample_df["predicted_intent"] = predicted_labels
@@ -474,6 +544,12 @@ def classify_stratified_sample(
             os.remove(checkpoint_path)
         except OSError:
             pass
+    if os.path.exists(ckpt_meta_path):
+        try:
+            os.remove(ckpt_meta_path)
+        except OSError:
+            pass
+
 
     # 8. Compute Distribution and Cost
     # Pricing for qwen/qwen3.8-27b: $0.15 / 1M prompt, $0.60 / 1M completion
@@ -566,7 +642,8 @@ if __name__ == "__main__":
     parser.add_argument("--stats", default=DEFAULT_STATS_PATH)
     parser.add_argument("--model", default=DEFAULT_GROQ_MODEL)
     parser.add_argument("--sample-size", type=int, default=6000)
-    parser.add_argument("--batch-size", type=int, default=25)
+    parser.add_argument("--batch-size", type=int, default=20)
+
     parser.add_argument("--max-messages", type=int, default=None)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     args = parser.parse_args()

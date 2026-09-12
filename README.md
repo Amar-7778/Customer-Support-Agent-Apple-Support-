@@ -183,9 +183,18 @@ python -m src.ingest.filter_brand --brand AppleSupport --threads data/processed/
 
 ## Testing
 
-Run the automated test suite with pytest:
+### Fast Unit Tests (Default)
+By default, `pytest` is configured via `pytest.ini` to run fast unit tests and skip heavy artifact validation:
 ```bash
 pytest tests/ -v
+```
+
+### Full Test Suite (Including Slow Parquet Validation)
+To run the full validation suite including the strict 6,000-message Parquet artifact integrity check (`@pytest.mark.slow`):
+```bash
+pytest tests/ -m slow -v
+# OR run all tests without filter:
+pytest tests/ -m "" -v
 ```
 
 The test suite validates:
@@ -194,3 +203,6 @@ The test suite validates:
 3. **Graph Branching & Broken Links**: Verifies multi-reply branches and broken parent links are properly resolved.
 4. **Heuristic Determinism**: Verifies resolution evaluation produces identical, deterministic tags across runs.
 5. **Brand Filter Integrity**: Verifies brand filtering produces non-empty output with all required schema fields.
+6. **Taxonomy & Cluster Consistency**: Ensures `taxonomy.yaml` schema validity, clustering silhouette peaks, and sample determinism.
+7. **6,000-Message Full Sample Integrity (`slow`)**: Strictly verifies exactly 6,000 customer inquiries, 100% Groq SDK classification (`groq_llm`), valid confidence scores, and zero fallback or missing labels.
+

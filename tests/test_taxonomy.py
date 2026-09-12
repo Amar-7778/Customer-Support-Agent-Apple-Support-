@@ -128,27 +128,35 @@ def test_taxonomy_yaml_structure():
     )
 
 
+@pytest.mark.slow
 def test_full_corpus_classification_coverage_and_conservation():
     """
-    Verify classified output artifact (stratified sample or full corpus):
-    - 100% of real customer messages receive a valid intent label (no nulls or empty strings).
-    - Class distribution sum matches total customer messages.
+    Verify classified output artifact (stratified sample):
+    - Exactly 6,000 real customer messages classified (rescoped from 74k corpus).
+    - 100% of messages receive a valid intent label (no nulls or empty strings).
+    - Class distribution sum matches exactly 6,000 messages.
     - Escalation default flag properly aligned with taxonomy.yaml.
-    - Provenance flag verifies 100% Groq LLM classification.
+    - Provenance flag verifies 100% Groq LLM classification (zero fallback).
+    - Confidence scores strictly within [0.0, 1.0].
     """
     sample_path = "data/processed/AppleSupport_classified_sample.parquet"
-    corpus_path = "data/processed/AppleSupport_classified_corpus.parquet"
-    
-    target_path = sample_path if os.path.exists(sample_path) else corpus_path
-    if not os.path.exists(target_path):
-        pytest.skip(f"Neither {sample_path} nor {corpus_path} exists yet.")
+    if not os.path.exists(sample_path):
+        pytest.skip(f"{sample_path} does not exist yet.")
 
-    df = pd.read_parquet(target_path)
+    df = pd.read_parquet(sample_path)
     assert not df.empty, "Classified dataset is empty!"
-    assert len(df) >= 50, f"Expected at least 50 classified messages, got {len(df):,}"
+    assert len(df) == 6000, f"Expected exactly 6,000 classified messages, got {len(df):,}"
 
     # Required columns
-    expected_cols = ["thread_id", "tweet_id", "text", "predicted_intent", "confidence", "escalation_default"]
+    expected_cols = [
+        "thread_id",
+        "tweet_id",
+        "text",
+        "predicted_intent",
+        "confidence",
+        "classification_source",
+        "escalation_default",
+    ]
     for col in expected_cols:
         assert col in df.columns, f"Missing column {col} in classified dataset"
 
@@ -163,10 +171,15 @@ def test_full_corpus_classification_coverage_and_conservation():
     actual_intents = set(df["predicted_intent"].unique())
     assert actual_intents.issubset(valid_intents), f"Found unexpected intents: {actual_intents - valid_intents}"
 
-    # Conservation: sum of class distribution == total rows
+    # Conservation: sum of class distribution == 6,000
     class_counts = df["predicted_intent"].value_counts()
-    assert int(class_counts.sum()) == len(df), "Sum of class distribution != total message count!"
+    assert int(class_counts.sum()) == 6000, "Sum of class distribution != 6,000!"
 
-    # Provenance verification if column present
-    if "classification_source" in df.columns:
-        assert (df["classification_source"] == "groq_llm").all(), "Found non-Groq classification sources!"
+    # Confidence scores within [0.0, 1.0]
+    assert (df["confidence"] >= 0.0).all() and (df["confidence"] <= 1.0).all(), (
+        "Confidence scores out of bounds [0.0, 1.0]!"
+    )
+
+    # Provenance verification: 100% groq_llm
+    assert (df["classification_source"] == "groq_llm").all(), "Found non-Groq classification sources!"
+

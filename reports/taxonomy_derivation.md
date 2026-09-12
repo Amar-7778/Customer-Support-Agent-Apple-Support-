@@ -148,9 +148,9 @@ To maintain rigorous, genuine LLM classification without unscientific shortcuts 
   - Overlap with earlier 2,000-message clustering sample: exactly **150 messages (2.50% of the 6,000 sample)**.
 - **Execution Architecture (`src/taxonomy/classify_stratified_sample.py`)**:
   - Exclusively powered by the official Groq Python SDK (`qwen/qwen3.8-27b`).
-  - Batch size: 25 messages per call.
+  - Dual-key failover pool supporting seamless quota rotation across multiple accounts.
   - Zero fallback: Removed TF-IDF shortcut completely. Every row classified by Groq (`classification_source: "groq_llm"`).
-  - Checkpointing: Saves intermediate progress after every batch to `data/processed/AppleSupport_classified_sample_checkpoint.parquet` for instant resume capability and crash resilience.
+  - Crash-resilient checkpointing after every batch with monotonic sidecar telemetry.
 - **Downstream Pipeline Role**:
   - The classified sample (`data/processed/AppleSupport_classified_sample.parquet`) serves as:
     1. **Stage 4 Source**: Precedent retrieval index and intent-partitioned vector store for candidate response drafting.
@@ -158,7 +158,39 @@ To maintain rigorous, genuine LLM classification without unscientific shortcuts 
 
 ---
 
-## 6. Failure Analysis: Real LLM Understanding vs. TF-IDF Centroid Shortcut
+## 6. Stratification Verification: K-Means Draft Clusters vs. Final Groq LLM Intents
+
+Comparing the original stratified sampling targets (`draft_cluster` in `AppleSupport_sample_6000.parquet`) against the final, genuine Groq LLM predictions across all 6,000 customer inquiries demonstrates how real language understanding resolved the ambiguities of weak lexical clustering:
+
+### 6.1 Distribution Comparison Table
+
+| Intent Name | Groq Assigned Count | Groq Pct (%) | Escalation Policy | Primary Contributing Clusters | Semantic Context & Rationale |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| `software_update_os_bugs` | **2,604** | **43.40%** | Standard | Clusters 0, 2, 4 | Dominant real-world inquiry type in late 2017 driven by iOS 11 rollout glitches, system lag, and app freezing. |
+| `keyboard_text_autocorrect` | **1,121** | **18.68%** | Standard | Clusters 3, 6, 0 | High-frequency viral iOS 11 "I [?]" symbol autocorrect glitch correctly isolated by LLM. |
+| `battery_power_performance` | **679** | **11.32%** | Standard | Clusters 2, 4 | Rapid battery drain, unexpected shutdowns, and post-update throttling complaints. |
+| `hardware_display_physical` | **431** | **7.18%** | Standard | Clusters 0, 2, 6 | Physical screen cracks, touch unresponsiveness, and home/power button failures. |
+| `orders_purchases_applecare` | **375** | **6.25%** | **ALWAYS Escalate** | Cluster 5 | Financial transactions, App Store double-charges, order delivery, and AppleCare coverage. |
+| `account_access_apple_id` | **355** | **5.92%** | **ALWAYS Escalate** | Clusters 0, 5 | Security-sensitive account lockouts, password resets, and two-factor recovery. |
+| `apple_music_audio_playback` | **236** | **3.93%** | Standard | Cluster 1 | Music library syncing, streaming playback errors, and AirPods volume/audio routing. |
+| `international_multilingual_inquiries` | **199** | **3.32%** | **ALWAYS Escalate** | Cluster 7 | Non-English inquiries (Spanish, Japanese, Portuguese, Arabic, French) requiring regional desk handoff. |
+| **TOTAL** | **6,000** | **100.00%** | **15.48% Escalate** | — | **100% Groq SDK Sourced (0 Fallback, 0 Nulls)** |
+
+### 6.2 Cluster-to-Intent Mapping & Under-Representation Analysis
+- **Direct Semantic Correspondence**:
+  - Cluster 7 mapped almost exclusively to `international_multilingual_inquiries` (92 messages), proving K-Means isolated non-English character sets effectively.
+  - Cluster 1 mapped cleanly to `apple_music_audio_playback` (98 messages).
+  - Cluster 6 mapped heavily to `keyboard_text_autocorrect` (516 messages).
+  - Cluster 5 mapped strongly to `orders_purchases_applecare` (235 messages).
+- **Cluster Diffusion into OS Bugs**:
+  - Clusters 0, 2, and 4 exhibited significant semantic diffusion into `software_update_os_bugs` because surface-level TF-IDF keywords (e.g. "phone", "apple", "iphone", "ios", "update") failed to distinguish between battery drain, OS lag, and screen stutter. The LLM cleanly disambiguated these into specific intents.
+- **Analysis of Lower-Volume Categories**:
+  - `international_multilingual_inquiries` (3.32%, 199 msgs) and `apple_music_audio_playback` (3.93%, 236 msgs) are the lowest-volume intents. This accurately mirrors Twitter AppleSupport reality: Twitter support was predominantly an English-first channel for iOS device troubleshooting. 
+  - Every single category retains $\ge 199$ verified customer messages, providing more than enough high-confidence precedent examples for Stage 4 retrieval indexing and Stage 6 golden benchmark curation.
+
+---
+
+## 7. Failure Analysis: Real LLM Understanding vs. TF-IDF Centroid Shortcut
 
 Comparing the genuine Groq LLM predictions against the old TF-IDF centroid shortcut revealed a **64.0% discrepancy rate**. Spot-checking confirmed that the LLM is overwhelmingly more accurate because it understands syntactic nuance, colloquial expressions, and domain context:
 
@@ -176,11 +208,18 @@ Comparing the genuine Groq LLM predictions against the old TF-IDF centroid short
 
 ---
 
-## 7. Pipeline Statistics & Decision Log
+## 8. Final Verified Pipeline Statistics
 
-[`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) has been updated with the verified Groq runs:
-- **Provider**: `Groq` (Official Python SDK)
+[`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) has been finalized with the completed 6,000-message run:
+- **Provider**: `Groq` (Official Python SDK, Multi-Key Failover Pool)
 - **Model**: `qwen/qwen3.8-27b`
-- **Output Artifact**: `data/processed/AppleSupport_classified_sample.parquet`
-- **Scoping**: Rescoped from 74k full corpus (~34.5h) to representative 6,000 stratified sample.
-- **Prior Run Status**: Superseded; prior 5-call/31,002-token numbers were mathematically inconsistent with full-corpus coverage and have been archived in Decision 7 and 8.
+- **Total Inquiries Classified**: **6,000**
+- **Output Artifact**: [`data/processed/AppleSupport_classified_sample.parquet`](file:///d:/Academic%20Projects/Hiver/data/processed/AppleSupport_classified_sample.parquet)
+- **Total API Calls**: **279 calls**
+- **Prompt Tokens**: **706,878**
+- **Completion Tokens**: **212,937**
+- **Total Tokens Consumed**: **919,815** (153.3 tokens/message)
+- **Total Compute Cost**: **$0.2338 USD**
+- **Classification Provenance**: **100.0% `groq_llm`** (0 TF-IDF fallback, 0 nulls, 0 empty strings)
+- **Always-Escalate Volume**: **929 messages (15.48%)**
+

@@ -190,3 +190,46 @@ This document tracks key architectural, methodological, and infrastructural deci
 - **Verification**:
   - Updated `tests/test_taxonomy.py` to validate `AppleSupport_classified_sample.parquet`.
   - Re-ran `pytest tests/ -v`: **All 11 tests passing**.
+
+---
+
+## Decision 9: Finalization of 6,000-Message Groq Stratified Sample, Test Assertion Hardening, and Multi-Key Failover Architecture
+
+- **Date**: 2026-09-12
+- **Context**: 
+  To eliminate all synthetic shortcuts and provide a rigorous empirical foundation for Stage 4 (precedent retrieval) and Stage 6 (golden evaluation benchmark), the 6,000-message stratified sample (`data/processed/AppleSupport_sample_6000.parquet`) was run to 100% completion using genuine few-shot LLM inference via the official Groq Python SDK (`qwen/qwen3.8-27b`). Zero fallback (TF-IDF cosine distance or synthetic labels) was permitted.
+- **Key Challenges & Architectural Solutions**:
+  1. **Groq Free-Tier Rate Limits & Multi-Key Failover**:
+     - *Rate Limit Realities*: Groq enforces 8,000 TPM, 1,000 Output Tokens Per Minute (OTPM), and a 200,000 Tokens Per Day (TPD) ceiling on `qwen/qwen3.8-27b`. Unbounded completions trigger `Requested 1030` errors, and single-account runs hit daily token caps before 6,000 rows complete.
+     - *Multi-Key Pool*: Enhanced `src/taxonomy/classify_stratified_sample.py` to support comma-separated Groq API keys in `.env`. On 429 quota exhaustion (TPD), the client automatically fails over to the next healthy key in the pool.
+     - *Pacing & Batch Optimization*: Configured `batch_size=20`, `max_tokens=800`, and smooth 30s inter-batch pacing to guarantee requests remain strictly below 1,000 OTPM.
+     - *Cooldown Parsing*: Replaced standard integer regex with `parse_groq_wait_time()` to correctly parse compound cooldown strings (e.g. `try again in 5m6.288s`) and apply exact backoff.
+     - *Parquet Checkpointing*: Implemented incremental checkpoint saves (`data/processed/AppleSupport_classified_sample_checkpoint.parquet`) and monotonic telemetry sidecars. Resumptions automatically skip already-classified rows without duplicate API calls or re-billing.
+  2. **Test Assertion Hardening (`tests/test_taxonomy.py`)**:
+     - *Lenient Threshold Bug*: Discovered that the existing unit test accepted any parquet file with `>= 50` rows, which masked partial/incomplete runs.
+     - *Strict Enforcement*: Hardened `test_full_corpus_classification_coverage_and_conservation` to strictly assert `len(df) == 6000`, 100% `classification_source == "groq_llm"`, zero nulls/empty strings, confidence bounds $[0.0, 1.0]$, and valid taxonomy intents.
+     - *Test Partitioning*: Created `pytest.ini` with `addopts = -m "not slow"` and marked the full artifact check with `@pytest.mark.slow`. Fast unit tests execute in ~20 seconds (`pytest tests/`), while complete verification runs on demand (`pytest tests/ -m slow` or `pytest tests/ -o addopts=""`).
+  3. **Verified Real Run Metrics**:
+     - **Dataset Artifact**: `data/processed/AppleSupport_classified_sample.parquet` (exactly 6,000 rows, 18 columns, 0 nulls, 0 empty strings).
+     - **Total API Calls**: **279 calls** (resumed from checkpoints across runs with zero duplicate calls).
+     - **Prompt Tokens**: **706,878 tokens**
+     - **Completion Tokens**: **212,937 tokens**
+     - **Total Tokens**: **919,815 tokens** (average **153.3 tokens/message**).
+     - **Estimated Compute Cost**: **$0.2338 USD**.
+     - **Always-Escalate Volume**: **929 / 6,000 messages (15.48%)**.
+     - **Provenance**: **100.0% Groq SDK Sourced** (`classification_source == "groq_llm"` across all 6,000 rows).
+  4. **Intent Distribution & Stratification Disambiguation**:
+     - The Groq LLM resolved K-Means lexical cluster overlap, accurately isolating high-frequency iOS 11 bug reports and autocorrect glitches:
+       - `software_update_os_bugs`: 2,604 (43.40%)
+       - `keyboard_text_autocorrect`: 1,121 (18.68%)
+       - `battery_power_performance`: 679 (11.32%)
+       - `hardware_display_physical`: 431 (7.18%)
+       - `orders_purchases_applecare`: 375 (6.25%)
+       - `account_access_apple_id`: 355 (5.92%)
+       - `apple_music_audio_playback`: 236 (3.93%)
+       - `international_multilingual_inquiries`: 199 (3.32%)
+     - Every category maintains $\ge 199$ customer inquiries, ensuring sufficient precedent density for all categories.
+- **Downstream Impact**:
+  - Stage 3 is officially 100% complete and certified.
+  - Stage 4 (Retrieval & Precedent Matching in `src/retrieval/`) is unblocked and ready for implementation.
+
