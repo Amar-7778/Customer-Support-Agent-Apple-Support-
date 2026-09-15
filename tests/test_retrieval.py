@@ -162,3 +162,33 @@ def test_retrieval_intent_filtering_and_schema():
         assert "outcome" in prec
         assert "similarity_score" in prec
         assert 0.0 <= prec["similarity_score"] <= 1.0
+
+
+def test_stratified_precedents_scope_and_distribution():
+    """Verify that structured_precedents.parquet satisfies the expanded N=3,000 target and stratification."""
+    if not os.path.exists(PRECEDENTS_PATH):
+        pytest.skip("Structured precedents artifact not generated yet.")
+
+    df = pd.read_parquet(PRECEDENTS_PATH)
+    assert len(df) == 3000, f"Expected exactly 3,000 precedents, found {len(df)}"
+    assert (df["extraction_source"] == "groq_llm").all(), "Non-Groq extraction found in precedents!"
+    assert df["action_taken"].isna().sum() == 0, "Found NaN in action_taken!"
+    assert (df["action_taken"].astype(str).str.strip() == "").sum() == 0, "Found empty action_taken string!"
+
+    # Target counts per intent:
+    expected_targets = {
+        "software_update_os_bugs": 1303,
+        "keyboard_text_autocorrect": 561,
+        "battery_power_performance": 339,
+        "hardware_display_physical": 215,
+        "orders_purchases_applecare": 187,
+        "account_access_apple_id": 177,
+        "apple_music_audio_playback": 118,
+        "international_multilingual_inquiries": 100,
+    }
+
+    counts = df["intent"].value_counts().to_dict()
+    for intent, expected_n in expected_targets.items():
+        actual_n = counts.get(intent, 0)
+        assert actual_n >= expected_n - 2, f"Intent {intent} under target: {actual_n} < {expected_n}"
+

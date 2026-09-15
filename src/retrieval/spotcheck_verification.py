@@ -49,27 +49,31 @@ def run_spotcheck(
     holdout_df = pd.read_parquet(holdout_path)
     logger.info(f"Loaded {len(holdout_df):,} golden holdout candidates.")
 
-    # Pick 10 representative queries across distinct intents
+    # Pick 14 representative queries across all 8 intents with deliberate emphasis on previously-thin categories:
+    # 3 multilingual, 2 orders, 2 account access, 2 music, 2 hardware, 1 battery, 1 keyboard, 1 update
     sample_queries = []
-    # Ensure at least 1 from each intent, plus 2 from highest volume intents
     intents_order = [
-        "software_update_os_bugs",
-        "keyboard_text_autocorrect",
-        "battery_power_performance",
-        "hardware_display_physical",
+        "international_multilingual_inquiries",
+        "international_multilingual_inquiries",
+        "international_multilingual_inquiries",
+        "orders_purchases_applecare",
         "orders_purchases_applecare",
         "account_access_apple_id",
+        "account_access_apple_id",
         "apple_music_audio_playback",
-        "international_multilingual_inquiries",
-        "software_update_os_bugs",
+        "apple_music_audio_playback",
+        "hardware_display_physical",
+        "hardware_display_physical",
+        "battery_power_performance",
         "keyboard_text_autocorrect",
+        "software_update_os_bugs",
     ]
 
     used_indices = set()
     for intent in intents_order:
         sub = holdout_df[(holdout_df["predicted_intent"] == intent) & (~holdout_df.index.isin(used_indices))]
         if not sub.empty:
-            picked = sub.sample(n=1, random_state=seed)
+            picked = sub.sample(n=1, random_state=seed + len(sample_queries))
             used_indices.add(picked.index[0])
             sample_queries.append(picked.iloc[0])
 

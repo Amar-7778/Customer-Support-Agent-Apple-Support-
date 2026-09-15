@@ -1,0 +1,146 @@
+[
+  {
+    "id": "T_1011836",
+    "intent": "battery_power_performance",
+    "intent_label": "Battery & Power",
+    "category_tag": "Hardware & OS",
+    "expected_decision": "escalate / auto_handle",
+    "text": "@AppleSupport IOS 11.03 continues to annihilate my battery, tkz Apple #iPhone7 #IOS11dead",
+    "length": 89
+  },
+  {
+    "id": "T_1113188",
+    "intent": "battery_power_performance",
+    "intent_label": "Battery & Power",
+    "category_tag": "Hardware & OS",
+    "expected_decision": "escalate / auto_handle",
+    "text": "@AppleSupport thanks for iOS 11. 6 hours standby at night n battery drops 46% without using phone. Cheers!! Good going.",
+    "length": 119
+  },
+  {
+    "id": "T_1002757",
+    "intent": "software_update_os_bugs",
+    "intent_label": "Software Update & OS Bugs",
+    "category_tag": "iOS 11",
+    "expected_decision": "auto_handle",
+    "text": "Hiya ma phone just actual SCREAMED like a smoke alarm in the middle of the night wtf just happened hello @115858 help please",
+    "length": 124
+  },
+  {
+    "id": "T_1015294",
+    "intent": "software_update_os_bugs",
+    "intent_label": "Software Update & OS Bugs",
+    "category_tag": "iOS 11",
+    "expected_decision": "auto_handle",
+    "text": "@AppleSupport is it normal if my 6s gives me a haptic feedback when I disable 'vibration mode', but not when I activate it?",
+    "length": 123
+  },
+  {
+    "id": "T_1013096",
+    "intent": "apple_music_audio_playback",
+    "intent_label": "Music & Audio Playback",
+    "category_tag": "Media & CarPlay",
+    "expected_decision": "auto_handle",
+    "text": "Hey @115858 @AppleSupport iOS 11 when I open a text from lock screen, I dont want my music to stop. How to fix?",
+    "length": 111
+  },
+  {
+    "id": "T_105339",
+    "intent": "apple_music_audio_playback",
+    "intent_label": "Music & Audio Playback",
+    "category_tag": "Media & CarPlay",
+    "expected_decision": "auto_handle",
+    "text": "@AppleSupport Is there a way to prevent my Apple Car Play from automatically playing music from my iPhone? I've looked thru all the settings on my phone and in my car and have not found anything. https://t.co/wfR8cOD14p",
+    "length": 219
+  },
+  {
+    "id": "T_1147569",
+    "intent": "keyboard_text_autocorrect",
+    "intent_label": "Keyboard & Autocorrect",
+    "category_tag": "Input & Typing",
+    "expected_decision": "auto_handle",
+    "text": "Hey @115858 - iOS 11 is randomly capitalizing words when I type stuff. You may think thats cool but its really annoying. K thanks bye",
+    "length": 133
+  },
+  {
+    "id": "T_1441990",
+    "intent": "keyboard_text_autocorrect",
+    "intent_label": "Keyboard & Autocorrect",
+    "category_tag": "Input & Typing",
+    "expected_decision": "auto_handle",
+    "text": "@AppleSupport what is going on with iOS 11.1 and the letter I ! Its a box and a exclamation point smh",
+    "length": 101
+  },
+  {
+    "id": "T_1180134",
+    "intent": "hardware_display_physical",
+    "intent_label": "Hardware & Display Issues",
+    "category_tag": "Physical Repairs",
+    "expected_decision": "escalate",
+    "text": "Dear Team. My Macbook Air makes vibration noise in the keyboard. The thing is, what has many other sounds done under the keyboard! What im able  to do?\n\n@AppleSupport",
+    "length": 166
+  },
+  {
+    "id": "T_1365519",
+    "intent": "hardware_display_physical",
+    "intent_label": "Hardware & Display Issues",
+    "category_tag": "Physical Repairs",
+    "expected_decision": "escalate",
+    "text": "@AppleSupport today I was listening music and out of nowhere my left earbud of my i7 stopped working ? What happened?",
+    "length": 117
+  },
+  {
+    "id": "T_1217618",
+    "intent": "account_access_apple_id",
+    "intent_label": "Account Access & Apple ID",
+    "category_tag": "Security Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "@AppleSupport The amount of phishing emails im getting disguised as Apple has tripled in last 2 months Whats up with that?",
+    "length": 122
+  },
+  {
+    "id": "T_1449321",
+    "intent": "account_access_apple_id",
+    "intent_label": "Account Access & Apple ID",
+    "category_tag": "Security Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "@AppleSupport I have an activation lock on my wifes iPhone as I was updating it to iOS 11.  She passed away and I need the phone.",
+    "length": 129
+  },
+  {
+    "id": "T_1284611",
+    "intent": "orders_purchases_applecare",
+    "intent_label": "Orders & AppleCare Billing",
+    "category_tag": "Financial Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "Hey @AppleSupport why my @53858 dont work ? It ask me to subscribe but im already a menber ...",
+    "length": 94
+  },
+  {
+    "id": "T_1291095",
+    "intent": "orders_purchases_applecare",
+    "intent_label": "Orders & AppleCare Billing",
+    "category_tag": "Financial Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "@AppleSupport On October 15th, I bought an Apple Watch Strap in the Apple Store in Qubec and I didn't receive the receipt yet .. why ?",
+    "length": 134
+  },
+  {
+    "id": "T_1395706",
+    "intent": "international_multilingual_inquiries",
+    "intent_label": "International & Multilingual",
+    "category_tag": "Routing Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "@AppleSupport When will apple appleplay launching to in India?",
+    "length": 62
+  },
+  {
+    "id": "T_1397305",
+    "intent": "international_multilingual_inquiries",
+    "intent_label": "International & Multilingual",
+    "category_tag": "Routing Critical",
+    "expected_decision": "escalate (Policy Restricted)",
+    "text": "@AppleSupport Por qu sus cables son de tan mala calidad? https://t.co/6AoyKUiXvT",
+    "length": 80
+  }
+]

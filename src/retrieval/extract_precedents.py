@@ -53,6 +53,16 @@ ALLOWED_OUTCOMES = [
 ]
 
 
+# STANDING SECURITY RULE:
+# Never print a full API key to stdout, stderr, or any log file, even for debugging.
+# All loggers, error handlers, and debug outputs must strictly mask keys using mask_key().
+def mask_key(k: str) -> str:
+    """Masks an API key for safe logging (e.g. gsk_R6Ns...ll2W)."""
+    if len(k) > 12:
+        return f"{k[:8]}...{k[-4:]}"
+    return "***"
+
+
 def initialize_groq_clients() -> Tuple[List[Groq], List[str]]:
     """Validate GROQ_API_KEY and initialize official Groq clients."""
     env_path = Path(__file__).resolve().parents[2] / ".env"
