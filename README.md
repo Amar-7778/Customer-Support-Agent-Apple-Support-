@@ -1,126 +1,234 @@
-# Autonomous Apple Support Agent: Grounded Customer Dispatch & Escalation Safeguard
+# Apple Support Customer Inquiry Resolution & Grounded Escalation System
 
-A production-grade, multi-stage customer support pipeline trained and evaluated on real Twitter customer interactions (`twcs.csv`, 2.81M rows). The system ingests raw multi-turn conversation trees, reconstructs 80,717 `@AppleSupport` threads, classifies inquiries across an empirically derived 8-intent taxonomy, grounds synthesized responses in 3,000 structured historical precedents stored in ChromaDB, and enforces an inspectable, cost-asymmetric escalation gating rule that prevents automated dispatch when precedent consensus is weak, intent is restricted, or drafts contain ungrounded claims.
+An end-to-end customer support pipeline built on 2.81 million tweets from the Kaggle Customer Support dataset (`twcs.csv`). The system reconstructs multi-turn conversational trees, isolates 80,717 `@AppleSupport` interactions, categorizes incoming inquiries across an empirically derived 8-intent domain taxonomy, grounds synthesized responses in 3,000 structured historical precedents in ChromaDB, and applies an inspectable decision layer that automatically escalates inquiries to human specialists when historical precedent consensus is split, customer intent falls into restricted safety categories, or drafted replies fail factual grounding checks.
 
 ```mermaid
-flowchart LR
-    A["Raw Data Ingest<br/>(2.81M twcs.csv)"] --> B["Thread Graph Reconstruction<br/>(798K threads conserved)"]
-    B --> C["Brand Filter<br/>(80,717 @AppleSupport)"]
-    C --> D["8-Intent Taxonomy<br/>(6,000 Groq Stratified Sample)"]
-    D --> E["Stratified Precedent ChromaDB<br/>(3,000 Vector Records)"]
-    E --> F["Autonomous Agent Pipeline<br/>(Classify → Retrieve → Draft → Verify)"]
-    F --> G["Cost-Asymmetric Evaluation<br/>(200 Golden Threads, Zero-Leakage)"]
+flowchart TD
+    A["Raw Dataset Ingestion<br/>2,811,774 tweets (twcs.csv)"] --> B["Thread Graph Reconstruction<br/>798,197 connected components (C-graph)"]
+    B --> C["Brand Filtering & Heuristics<br/>80,717 @AppleSupport threads (91.7% resolved)"]
+    C --> D["Unsupervised Clustering & Taxonomy<br/>MiniBatchKMeans + Human Review → 8 Intents"]
+    D --> E["Precedent Extraction & Vector Store<br/>3,000 Stratified Precedents in ChromaDB"]
+    E --> F["Autonomous Agent Pipeline<br/>Classify → Retrieve → Draft → Self-Critique"]
+    F --> G["Gating & Escalation Decision Layer<br/>Agreement Threshold (0.50) + Confidence (0.60) + Policy"]
+    G --> H["Evaluation Benchmark & Demo UI<br/>200 Holdout Inquiries + FastAPI & React Demo"]
 ```
+
+---
+
+## Table of Contents
+1. [What This Agent Does](#what-this-agent-does)
+2. [Headline Evaluation Results (Preliminary Status)](#headline-evaluation-results-preliminary-status)
+3. [Metric Justification: Why Shallow Surface Metrics Mislead](#metric-justification-why-shallow-surface-metrics-mislead)
+4. [Taxonomy Design: Data-Derived vs. Hand-Picked Categories](#taxonomy-design-data-derived-vs-hand-picked-categories)
+5. [Why These Design Choices](#why-these-design-choices)
+6. [Trade-offs](#trade-offs)
+7. [Documented Limitations](#documented-limitations)
+8. [AI Tools Used & Audit Provenance](#ai-tools-used--audit-provenance)
+9. [Future Improvements](#future-improvements)
+10. [Tested Zero-Leakage Invariant](#tested-zero-leakage-invariant)
+11. [Quickstart & Reproduction (< 15 Minutes)](#quickstart--reproduction--15-minutes)
+12. [Interactive Demo Application (FastAPI + React)](#interactive-demo-application-fastapi--react)
+13. [Project Structure](#project-structure)
+14. [Tech Stack](#tech-stack)
 
 ---
 
 ## What This Agent Does
 
-- **Classifies customer intent with calibrated uncertainty**: Maps incoming customer tweets into an 8-intent domain taxonomy using few-shot Groq inference (`qwen/qwen3.8-27b`), rejecting classifications when model confidence drops below 0.60.
-- **Synthesizes precedent-grounded responses under 280 characters**: Retrieves top-3 nearest-neighbor historical Apple Support resolutions from a 3,000-precedent ChromaDB vector index and drafts Twitter-compliant replies constrained strictly to historical diagnostic steps.
-- **Enforces hard stop escalation safeguards**: Automatically diverts inquiries to human specialists if: (1) the intent is safety-restricted (account access/security, billing/AppleCare, multilingual routing), (2) historical precedents disagree on resolution action (agreement score $< 0.50$), (3) classifier confidence is low ($< 0.60$), or (4) an independent LLM self-critique pass detects ungrounded claims or fabricated specifics.
+- **Classifies customer intent with uncertainty gating**: Categorizes incoming Twitter messages into 8 domain-specific intents using few-shot Groq inference (`qwen/qwen3.8-27b`), routing to human specialists if model confidence falls below 0.60.
+- **Synthesizes grounded replies constrained by precedent evidence**: Retrieves top-3 nearest-neighbor historical Apple resolutions from a 3,000-precedent ChromaDB index and drafts concise Twitter replies (under 280 characters) strictly matching historical diagnostic protocol.
+- **Enforces inspectable escalation boundaries**: Automatically blocks autonomous dispatch and transfers inquiries to human agents whenever: (1) an intent is policy-restricted (account credentials, financial billing, multilingual routing), (2) historical precedents disagree on resolution action (agreement score $< 0.50$), or (3) an independent LLM self-critique pass detects ungrounded claims or hallucinated specifics.
 
 ---
 
-## Headline Evaluation Results (200 Golden Holdout Inquiries)
+## Headline Evaluation Results (Preliminary Status)
 
-The system is evaluated against two operational baselines on a strictly partitioned 200-thread golden evaluation set (`data/processed/golden_eval_set.parquet`):
-1. **Trivial Baseline**: Always escalates 100% of inquiries to human queues, emitting the single most frequent historical canned workaround tweet (`https://t.co/xXaXeeSRt9`).
-2. **Simple Baseline**: Regular-expression keyword matcher, 8 intent-specific historical canned templates, and mandatory escalation on safety-restricted intents.
-3. **Stage 5 Agent**: Autonomous pipeline running few-shot Groq intent classification, 3,000-precedent ChromaDB retrieval, precedent-agreement gating, grounded drafting, and self-critique verification.
+> [!CAUTION]
+> **Status Disclosure on Evaluation Ground Truth**:
+> The numbers below are **preliminary**. An audit of `data/processed/golden_eval_set_human.json` confirms that **1 of 200 entries** has been genuinely hand-labeled by a human auditor (Thread `T_2042358`, taking 447 seconds). The remaining 199 entries are synthetic reference labels generated via `src/eval/complete_golden_labels.py` (completed in 17.4 minutes with simulated timing).
+> 
+> Downstream metrics reflect agent performance against this mixed reference set. Genuine human hand-labeling is currently in progress using the interactive terminal tool (`python -m src.eval.labeling_tool --cli`). These figures should be interpreted as an operational comparison against baseline heuristics rather than a finalized human-validated benchmark.
 
-| Metric Dimension | Trivial Baseline | Simple Baseline | Stage 5 Agent | Metric Source / Ground Truth |
+### Benchmark Comparison on 200 Holdout Threads
+
+Evaluated on `data/processed/golden_eval_set.parquet` against two operational baselines:
+1. **Trivial Baseline**: Always escalates 100% of incoming inquiries, emitting the single most common historical workaround link (`https://t.co/xXaXeeSRt9`).
+2. **Simple Baseline**: Regular-expression keyword matcher, 8 intent-specific historical canned response templates, and hardcoded escalation for restricted intents.
+3. **Stage 5 Agent**: Live Groq pipeline (`qwen/qwen3.8-27b`) with 3,000-precedent ChromaDB retrieval, agreement gating ($\tau = 0.50$), confidence threshold ($\tau = 0.60$), and grounding self-critique.
+
+| Metric Dimension | Trivial Baseline | Simple Baseline | Stage 5 Agent (Preliminary) | Metric Source / Ground Truth |
 | :--- | :---: | :---: | :---: | :--- |
 | **Intent Classification Accuracy** | 0.00% | 60.50% | **93.00%** | `reports/golden_run_results.json` |
 | **Intent Macro F1 Score** | 0.0000 | 0.6013 | **0.9082** | `reports/golden_run_results.json` |
 | **Escalation Precision** | 0.2400 | **0.8148** | 0.3796 | `reports/golden_run_results.json` |
 | **Escalation Recall** | **1.0000** | 0.4583 | **0.8542** | `reports/golden_run_results.json` |
 | **Escalation F1 Score** | 0.3871 | **0.5867** | 0.5256 | `reports/golden_run_results.json` |
-| **False Auto-Handle Rate** *(Safety Hazard)* | **0.00%** | 54.17% | **14.58%** | 73% relative hazard reduction vs. Simple |
-| **False Escalation Rate** *(Labor Overhead)* | 100.00% | **3.29%** | 44.08% | Deliberate conservative bias |
+| **False Auto-Handle Rate** *(Safety Hazard)* | **0.00%** | 54.17% | **14.58%** | 73% relative risk reduction vs. Simple |
+| **False Escalation Rate** *(Labor Overhead)* | 100.00% | **3.29%** | 44.08% | Deliberate conservative safety bias |
 | **Asymmetric Risk Cost** *(5:1 Penalty)* | 0.7600 | 0.6750 | **0.5100** | Lowest expected operational cost |
 
-> [!IMPORTANT]
-> **Immediate Honest Caveat on Headline Numbers**:
-> While the Agent cuts catastrophic false auto-handles from **54.17%** (Simple Baseline) down to **14.58%** and delivers **93.00%** classification accuracy, it does so by accepting a **44.08% false escalation rate** (routing auto-handleable cases to human specialists). In production customer support, false auto-handling a bereaved customer, account compromise, or billing error is orders of magnitude more damaging than queue overhead ($\text{Cost}(\text{False Auto}) \gg \text{Cost}(\text{False Escalate})$). Full discussion of these tradeoffs is documented in [`reports/agent_spotcheck.md`](file:///d:/Academic%20Projects/Hiver/reports/agent_spotcheck.md) and [`DECISIONS.md` (Decision 14)](file:///d:/Academic%20Projects/Hiver/DECISIONS.md#L403-L442).
-
-### Failure Analysis on Weakest-Performing Intent (`hardware_display_physical`)
-In the per-intent decomposition, `hardware_display_physical` achieved **100.0% recall** but only **50.0% precision** (F1: 0.6667, 8 support):
-- **Root Cause & Transcript Example**: Inquiries involving foreign language queries mentioning physical items (e.g. Case #10: `¿Por qué sus cables son de tan mala calidad?`) or software update freezes that mention physical buttons/screens trigger false-positive hardware classifications due to vocabulary overlap.
-- **Safety Interception**: Because historical resolutions for physical hardware issues diverge, the precedent agreement score dropped below threshold ($0.47 < 0.50$), safely triggering policy escalation to human agents rather than sending an automated hardware diagnostic.
+### Immediate Honest Caveat
+The agent reduces the catastrophic false auto-handle rate from **54.17%** (Simple Baseline) to **14.58%**, but it achieves this by accepting a **44.08% false escalation rate** (routing auto-handleable cases to human specialists). In production customer support, false auto-handling a compromised account, billing dispute, or grieving customer causes severe privacy breaches and customer churn ($\text{Cost}(\text{False Auto}) \gg \text{Cost}(\text{False Escalate})$). The decision threshold intentionally trades higher human queue labor to prevent ungrounded autonomous replies.
 
 ---
 
-## Provenance & Tested Zero-Leakage Invariant
+## Metric Justification: Why Shallow Surface Metrics Mislead
 
-To ensure complete statistical validity and eliminate evaluation contamination:
-- **Zero-Overlap Invariant**: The 200 golden evaluation threads (`data/processed/golden_eval_set.parquet`) and the 300 holdout candidates (`data/processed/golden_eval_candidates.parquet`) have **EXACTLY ZERO OVERLAP** with the 3,000-thread retrieval index (`data/processed/structured_precedents.parquet`) and the 5,700-thread indexable candidate pool (`data/processed/indexable_precedents_input.parquet`).
-- **Verified Automated Tests**:
-  - [`tests/test_retrieval.py::test_holdout_zero_overlap_with_indexable_and_index`](file:///d:/Academic%20Projects/Hiver/tests/test_retrieval.py#L58-L98): Formally asserts `len(holdout_ids.intersection(indexable_ids)) == 0` and verifies zero presence in ChromaDB.
-  - [`tests/test_eval.py::test_golden_set_zero_overlap_verification`](file:///d:/Academic%20Projects/Hiver/tests/test_eval.py#L78-L106): Asserts `len(golden_tids.intersection(prec_tids)) == 0` across all 200 evaluation threads.
+Standard NLP evaluation metrics (e.g. BLEU, ROUGE, or uncalibrated semantic cosine similarity) measure surface vocabulary overlap or general topical similarity. In high-stakes customer support, these metrics produce severe false positives on hallucinated replies that sound helpful but violate grounding.
+
+### Real Worked Example from Evaluation Audit (`reports/agent_spotcheck.md`, Case #1)
+
+- **Thread ID**: `T_1217618` (Intent: `account_access_apple_id`)
+- **Customer Inquiry**:
+  > *"@AppleSupport The amount of phishing emails i’m getting disguised as Apple has tripled in last 2 months… What’s up with that?"*
+- **Retrieved Precedent Text** (Similarity: `0.7058` | Historical Action: `directed_to_support_link`):
+  > *"Thank you for reaching out to us and providing us with this information. This email is not from Apple. Please report this phishing message using the info here: https://t.co/6Ye6EtSytB"*
+- **Agent Drafted Reply**:
+  > *"We're sorry to hear you're receiving these messages. These are not from Apple. Please do not click any links or provide personal information. You can learn how to spot and report phishing attempts here: https://support.apple.com/en-us/HT204910"*
+
+**The Metric Divergence**:
+1. **Shallow Semantic Match (Embedding Cosine Similarity / BERTScore)**:
+   - Evaluates to **~0.94 (Very High)**. Both texts discuss reporting phishing, reassure the customer that Apple did not send the message, and provide a reporting link. Under standard RAG benchmarks, this is scored as an exemplary response.
+2. **Factual Grounding Audit (Reality)**:
+   - The drafted reply fabricated a specific canonical Knowledge Base article identifier (`HT204910`) and full Apple URL not present anywhere in the retrieved precedent (which contained only the Twitter shortlink `https://t.co/6Ye6EtSytB`).
+   - The LLM injected this fact from its pre-training parametric memory. If the model had injected an outdated article ID or broken URL, the customer would have received invalid guidance.
+   - A surface metric rewards this fluency; a rigorous grounding audit categorizes it as a **hallucination failure** (`Sub-Mode 1b: Plausible-but-Ungrounded Specifics`). This empirical finding is why our pipeline enforces independent grounding self-critique and hard policy escalation.
 
 ---
 
-## Why These Design Choices?
+## Taxonomy Design: Data-Derived vs. Hand-Picked Categories
+
+A common weakness in support agent benchmarks is relying on hand-picked keyword buckets where a single generic category absorbs the majority of traffic (e.g. 60%+ in a "general_support" catch-all), obscuring routing failures.
+
+Our 8-intent taxonomy was derived empirically through unsupervised clustering and manual verification:
+1. **Empirical Clustering**: MiniBatchKMeans ($k=8$) over TF-IDF and dense embeddings across 2,000 sampled threads (`reports/taxonomy_derivation.md`).
+2. **Distribution Balance**: Across the 6,000-message stratified sample (`reports/pipeline_stats.json`), the largest category (`software_update_os_bugs`) represents 43.4%, while distinct tail intents are preserved with explicit representation floors:
+   - `keyboard_text_autocorrect`: 18.68% (viral iOS 11 letter 'i' glitch)
+   - `battery_power_performance`: 11.32% (iOS 11 battery drain)
+   - `hardware_display_physical`: 7.18% (screens, buttons, vibrations)
+   - `orders_purchases_applecare`: 6.25% (subscriptions, billing disputes)
+   - `account_access_apple_id`: 5.92% (phishing, Apple ID lockouts)
+   - `apple_music_audio_playback`: 3.93% (CarPlay, audio routing)
+   - `international_multilingual_inquiries`: 3.32% (Spanish, Portuguese, Hindi inquiries)
+3. **Operational Relevance**: Every intent maps to distinct operational handling rules (e.g., account access and billing always escalate, whereas viral keyboard glitches auto-handle with official workaround documentation).
+
+---
+
+## Why These Design Choices
 
 ### 1. Structured Precedent Extraction over Raw-Text RAG
-Raw customer tweets contain noise, user handles, typos, and broken shortlinks. Directly retrieving raw text causes the generator to mimic user complaints rather than official resolution protocol. By running structured LLM precedent extraction into schema fields (`action_taken`, `outcome`, `brand_reply_text`), retrieval grounds on verified diagnostic actions rather than surface keyword matching.
+Raw customer tweets contain noise, user handles (`@115858`), broken links, and emotional sarcasm. Directly embedding raw customer replies causes retrieval to match on customer complaints rather than support actions. We extract structured schema fields (`action_taken`, `outcome`, `brand_reply_text`), ensuring nearest-neighbor search matches on diagnostic actions.
 
 ### 2. Precedent-Agreement as an Escalation Signal
-Instead of relying solely on LLM self-reported confidence (which suffers from overconfidence), the agent measures semantic consensus across the top-3 retrieved historical resolutions. When historical Apple agents themselves took conflicting actions on similar issues ($< 0.50$ agreement), this operational divergence signals an edge case, triggering safe human escalation.
+LLM self-reported confidence is notoriously miscalibrated. Instead, we measure consensus across the top-3 retrieved historical resolutions. When historical human Apple agents themselves took divergent actions on similar issues ($< 0.50$ agreement), this disagreement signals operational ambiguity, triggering safe human escalation.
 
-### 3. Why AppleSupport over Other Brands?
-Benchmarking the Kaggle dataset (`reports/brand_candidates.csv`) revealed `@AppleSupport` as the premier dataset: 80,717 reconstructed multi-turn threads, 238,907 tweets, an average conversation length of 2.96 tweets, and a 91.67% resolution rate. Inquiries span intricate software bugs, hardware diagnostics, account recovery, and subscription billing, providing a robust operational domain.
+### 3. Why AppleSupport over Other Brands
+`@AppleSupport` is the largest, most coherent brand in the Kaggle corpus: 80,717 reconstructed multi-turn threads, 238,907 tweets, and an average thread length of 2.96 tweets. Unlike airline accounts (which almost exclusively ask for reservation codes in DM), Apple conversations feature technical troubleshooting across distinct device classes and operating systems.
 
 ### 4. 3,000-Precedent Stratified Sample over Full Corpus
-Exhaustive extraction of all 73,997 resolved threads was cost- and rate-prohibitive (~23.5 hours at 8,000 TPM Groq tier). Rather than arbitrary truncation, a 3,000-thread sample was drawn stratified strictly proportional to the 8 canonical intents identified in Stage 3, ensuring balanced tail coverage (`account_access_apple_id`: 177, `orders_purchases_applecare`: 187, `international_multilingual_inquiries`: 100).
+Exhaustive LLM extraction across all 73,997 resolved threads was cost- and rate-prohibitive (~23.5 hours at 8,000 TPM Groq tier). Rather than arbitrary truncation, a 3,000-thread sample was drawn stratified strictly proportional to the 8 canonical intents identified in Stage 3, ensuring balanced tail coverage (`account_access_apple_id`: 177, `orders_purchases_applecare`: 187, `international_multilingual_inquiries`: 100).
 
 ---
 
-## Quickstart: End-to-End Reproduction in Under 15 Minutes
+## Trade-offs
 
-The evaluation harness reproduces all headline metrics, benchmark tables, and calibration curves directly from verified cache in **0.26 seconds** (or live via `--live`).
+- **Chose a 3,000-sample precedent index at the cost of full-corpus coverage**: Bounded LLM inference costs (~$0.23 total extraction spend) and avoided API rate limits, but excluded ~70,000 resolved threads from nearest-neighbor retrieval.
+- **Chose structured precedent extraction at the cost of batch inference latency**: Required 710 batch API calls during offline indexing to extract structured schema fields, but eliminated customer complaint noise from vector matching.
+- **Chose a single brand domain (`@AppleSupport`) at the cost of cross-brand generality**: Enabled deep domain-specific taxonomy derivation and precise troubleshooting grounding, but models cannot be deployed to other industries without re-indexing.
+- **Chose conservative escalation gating at the cost of autonomous throughput**: Setting a 5:1 penalty on false auto-handles and an uncertainty threshold ($\tau = 0.60$) reduces catastrophic routing errors to 14.6%, but diverts 44.1% of auto-handleable inquiries to human queues.
 
-### 1. Clone & Setup Environment
+---
+
+## Documented Limitations
+
+1. **Resolution Heuristic Human-Agreement Ceiling (73.3%)**:
+   Our Stage 2 filter marks threads resolved if a brand reply is followed by 24 hours of inactivity. Manual inspection of 60 threads (`reports/manual_spotcheck.md`) revealed human agreement of only **73.3%**. In ~26.7% of cases, customers did not achieve resolution; they simply abandoned the interaction out of frustration.
+2. **Multilingual Intent Agreement Inflation**:
+   Inquiries in Spanish or Portuguese almost always retrieve standard English language-redirection links or DM requests. This produces artificially high precedent agreement scores ($0.87 - 1.00$) that reflect uniform brand policy rather than technical consensus.
+3. **Grounding Verifier False Negatives on Invented Specifics**:
+   Human spot-check auditing (`reports/agent_spotcheck.md`, Decision 13) proved that the LLM grounding verifier evaluates general semantic alignment and misses fabricated details:
+   - *Invented Wrong Specifics*: Fabricating an unmentioned iOS version (Case #5: inventing `11.0.3`).
+   - *Plausible-but-Ungrounded Specifics*: Injecting real Knowledge Base URLs not in the precedent (Case #1: injecting `HT204910`).
+4. **Small-N Judge-vs-Human Calibration (N=40)**:
+   The LLM-as-a-judge evaluation rubric was calibrated against a single human rater across **N=40** stratified samples. While adjacent agreement was 97.5%, Cohen's kappa ($\kappa \approx 0.70$) indicates the judge is systematically more lenient on fluent technical assertions than a human auditor.
+5. **Preliminary Golden Evaluation Set (1/200 Hand-Labeled)**:
+   As disclosed above, full human annotation is incomplete. Current metrics reflect synthetic reference labels and are subject to adjustment once human labeling concludes.
+
+---
+
+## AI Tools Used & Audit Provenance
+
+- **AI Coding Agent Collaboration**: Development was executed via an AI coding agent pair-programming under continuous, direct human review, prompt refinement, and instruction.
+- **Independent Verification Discipline**: No numbers or metrics in this repository are fabricated or typed from memory. Every reported statistic traces directly to an execution log or output artifact (`reports/pipeline_stats.json`, `reports/golden_run_results.json`).
+- **Caught and Corrected Errors**:
+  - *Stage 3 Classification Shortcut*: Identified that an early run relied on an unverified TF-IDF heuristic rather than Groq LLM inference. Replaced with the complete 6,000-message Groq stratified sample (`reports/pipeline_stats.json`, Decision 7).
+  - *Stage 4 Precedent Scope Asymmetry*: Discovered that extraction had stopped at 400 precedents due to an intentional cap. Rescoped and expanded to 3,000 stratified precedents across all 8 intents (`DECISIONS.md`, Decision 11).
+  - *Stage 5 Grounding Vulnerability*: Identified that standard grounding prompts suffered false negatives on invented version numbers and URLs, leading directly to the two-part failure taxonomy in Decision 13.
+  - *Stage 6 Synthetic Label Audit*: Identified that batch-generated labels were stamped as human, establishing the evaluation moratorium and interactive tool in Decision 15.
+
+---
+
+## Future Improvements
+
+1. **Entity-Level Token Containment Verification**: Replace pure LLM self-critique with a deterministic regex and entity-matching layer that cross-checks all version numbers, URLs, and dollar amounts against precedent tokens.
+2. **Upstream Language Detection**: Deploy an explicit language-detection filter (e.g. `fasttext` or `langdetect`) prior to intent classification to prevent Spanish and Portuguese inquiries from misclassifying into technical hardware buckets.
+3. **Multi-Annotator Human Validation**: Expand the golden set audit to 3 independent human annotators to establish inter-annotator agreement (Fleiss' kappa) and resolve borderline ambiguity.
+4. **Dynamic k-Expansion in Precedent Retrieval**: Automatically expand retrieval from $k=3$ to $k=5$ when top-1 similarity falls below 0.60 to improve precedent consensus estimation on tail queries.
+
+---
+
+## Tested Zero-Leakage Invariant
+
+To guarantee evaluation validity:
+- **Invariant**: The 200 golden evaluation threads (`data/processed/golden_eval_set.parquet`) and 300 holdout candidates (`data/processed/golden_eval_candidates.parquet`) have **ZERO OVERLAP** with the 3,000-precedent retrieval index (`data/processed/structured_precedents.parquet`) and the 5,700 indexable candidate pool.
+- **Automated Verification Tests**:
+  - [`tests/test_retrieval.py::test_holdout_zero_overlap_with_indexable_and_index`](file:///d:/Academic%20Projects/Hiver/tests/test_retrieval.py#L58-L98)
+  - [`tests/test_eval.py::test_golden_set_zero_overlap_verification`](file:///d:/Academic%20Projects/Hiver/tests/test_eval.py#L78-L106)
+
+---
+
+## Quickstart & Reproduction (< 15 Minutes)
+
+Reproduction of all evaluation tables, baselines, and calibration curves runs from verified cache in **0.24 seconds** without external dependencies. The full 32-test automated test suite executes in **~14.0 seconds**.
+
+### 1. Clone & Setup
 ```bash
 git clone https://github.com/Amar-7778/Customer-Support-Agent-Apple-Support-.git
 cd Customer-Support-Agent-Apple-Support-
 
-# Create Python virtual environment
+# Create and activate virtual environment
 python -m venv .venv
-# Activate:
-# On Windows:
+# Windows:
 .\.venv\Scripts\activate
-# On Linux/macOS:
+# Linux/macOS:
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Configure Credentials
-Copy `.env.example` to `.env` and provide your Groq API key (used for live inference; cached reproduction requires no API key):
+### 2. Configure Credentials (Optional for Cached Eval)
 ```bash
 cp .env.example .env
-# Edit .env: GROQ_API_KEY=gsk_...
+# Set GROQ_API_KEY=gsk_... (Required only for live inference; cached reproduction runs offline)
 ```
 
-### 3. Run Automated Tests & Reproduce Evaluation
+### 3. Run Automated Tests & Reproduce Benchmark
 ```bash
-# 1. Run full test suite (32 tests verifying schema, zero-leakage, and agent gating)
-# Measured execution time: ~12.0 seconds
+# Execute full test suite (32 tests verifying schema, zero-leakage, and gating)
+# Measured execution time: ~14.0 seconds
 pytest tests/ -v
 
-# 2. Reproduce benchmark evaluation tables and headline numbers from cache
-# Measured execution time: 0.26 seconds
+# Reproduce all evaluation benchmark tables, per-intent metrics, and tradeoff curves
+# Measured execution time: 0.24 seconds
 python run_eval.py
 ```
 
 ---
 
-## Running the Demo Application (FastAPI Backend + React Frontend)
+## Interactive Demo Application (FastAPI + React)
 
-The repository includes a production-grade single-page demo connected to the live FastAPI agent service:
+A full single-page demo application is provided, connecting directly to the real FastAPI agent service (`/handle_message`) with zero mocked responses. Features a 4-stage pipeline stepper, real candidate tweets from the golden dataset, official `@AppleSupport` reply simulation, precedent evidence drawer, and grounding verification shield:
 
 ```bash
 # Terminal 1: Launch FastAPI Backend (Port 8000)
@@ -131,27 +239,27 @@ cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` in any browser to evaluate real customer tweets, inspect ChromaDB precedents, and observe the live 4-stage pipeline stepper.
+Open `http://localhost:5173` in your browser to evaluate real customer inquiries live.
 
 ---
 
 ## Project Structure
 
 ```text
-├── .env.example                   # Environment template for Groq API keys
-├── CONTRIBUTING.md                # Security rules & standing API key masking policy
-├── DECISIONS.md                   # Formal Architectural Decision Records (Decisions 1–16)
-├── Makefile                       # Execution shortcuts for ingestion, indexing, and eval
-├── README.md                      # Project documentation and reproduction guide
-├── pyrightconfig.json             # Python static typing configuration
-├── pytest.ini                     # Pytest configuration and test path definitions
-├── requirements.txt               # Pinned Python dependencies
-├── run_eval.py                    # Fast standalone evaluation benchmark reproducer (0.26s)
-├── run_pipeline.py                # End-to-end pipeline driver
-├── taxonomy.yaml                  # Finalized 8-intent domain taxonomy and exemplars
+├── .env.example                   # Environment template for Groq credentials
+├── CONTRIBUTING.md                # Security guidelines and standing API key masking rule
+├── DECISIONS.md                   # Architectural Decision Records (Decisions 1–16)
+├── Makefile                       # Execution shortcuts
+├── README.md                      # Project documentation and engineering report
+├── pyrightconfig.json             # Python typing configuration
+├── pytest.ini                     # Pytest runner settings
+├── requirements.txt               # Python package dependencies
+├── run_eval.py                    # Fast standalone evaluation benchmark reproducer (0.24s)
+├── run_pipeline.py                # End-to-end pipeline execution driver
+├── taxonomy.yaml                  # Finalized 8-intent taxonomy and exemplars
 │
 ├── data/
-│   ├── raw/twcs.csv               # Raw Twitter Customer Support dataset (2.81M rows)
+│   ├── raw/twcs.csv               # Raw Kaggle Twitter Customer Support dataset (2.81M rows)
 │   └── processed/
 │       ├── AppleSupport_threads.parquet        # 80,717 reconstructed AppleSupport threads
 │       ├── AppleSupport_sample_6000.parquet    # Stratified 6,000-message representative sample
@@ -160,10 +268,10 @@ Open `http://localhost:5173` in any browser to evaluate real customer tweets, in
 │       ├── structured_precedents.parquet       # 3,000 extracted structured precedents
 │       ├── golden_eval_candidates.parquet      # 300 held-out evaluation candidates
 │       ├── golden_eval_set.parquet             # 200 golden evaluation set threads
-│       ├── golden_eval_set_human.json          # Human-audited ground-truth labels
+│       ├── golden_eval_set_human.json          # Golden evaluation set label store
 │       └── chroma_db/                          # Persistent ChromaDB vector index (3,000 vectors)
 │
-├── frontend/                      # React + TypeScript + Tailwind CSS demo interface
+├── frontend/                      # React 19 + Vite + Tailwind CSS demo interface
 │   ├── src/
 │   │   ├── components/            # UI components (DecisionHero, DraftReply, PrecedentsDrawer)
 │   │   ├── data/examples.json     # 16 real candidate tweets extracted from golden dataset
@@ -175,11 +283,11 @@ Open `http://localhost:5173` in any browser to evaluate real customer tweets, in
 │
 ├── reports/
 │   ├── agent_spotcheck.md         # Stage 5 16-case multi-agent spot-check audit
-│   ├── brand_candidates.csv       # Benchmark metrics across top dataset brands
+│   ├── brand_candidates.csv       # Comparative metrics across top Kaggle brands
 │   ├── cleanup_audit.md           # Stage 1–2 repository housekeeping audit
 │   ├── golden_eval_methodology.md # Stage 6 200-example golden sampling methodology
 │   ├── golden_run_results.json    # Cached full evaluation outputs across 200 golden threads
-│   ├── manual_spotcheck.md        # Stage 2 resolution heuristic verification
+│   ├── manual_spotcheck.md        # Stage 2 resolution heuristic verification (73.3% agreement)
 │   ├── pipeline_stats.json        # Machine-readable pipeline telemetry across Stages 1–5
 │   ├── spotcheck_retrieval.md     # Stage 4 precedent retrieval audit (14 queries)
 │   ├── taxonomy_derivation.md     # Stage 3 intent clustering & taxonomy synthesis
@@ -231,24 +339,14 @@ Open `http://localhost:5173` in any browser to evaluate real customer tweets, in
 
 ## Tech Stack
 
-| Component / Layer | Technology | Justification & Purpose |
+| Layer | Technology | Operational Purpose |
 | :--- | :--- | :--- |
-| **Language & Runtime** | Python 3.11 | High-performance standard with vectorized C-extensions. |
-| **Web & API Framework** | FastAPI + Uvicorn | Async ASGI microservice with typed Pydantic validation. |
-| **Vector Database** | ChromaDB (v0.5+) | Embedded vector store; local persistence with zero cloud lock-in. |
-| **Embedding Model** | `all-MiniLM-L6-v2` | 384-dim dense embeddings via fastembed ONNX runtime. |
-| **LLM Inference Provider**| Groq Cloud SDK | Ultra-low latency inference (`qwen/qwen3.8-27b`) with key rotation. |
-| **Graph Processing** | `scipy.sparse.csgraph` | C-optimized connected components for 2.81M tweet reconstruction. |
-| **Data Storage** | Apache Parquet (pyarrow) | High-compression columnar format preserving schemas across stages. |
-| **Test Suite** | Pytest + pytest-asyncio | 32 automated test suites enforcing data invariants and gating. |
-| **Demo Frontend** | React 19 + Vite + Tailwind | Modern single-page inspection console with real pipeline stepper. |
-
----
-
-## Detailed Documentation & Reports
-
-- **Decision Log**: [`DECISIONS.md`](file:///d:/Academic%20Projects/Hiver/DECISIONS.md) — Architectural Decision Records for Decisions 1 through 16.
-- **Evaluation Methodology**: [`reports/golden_eval_methodology.md`](file:///d:/Academic%20Projects/Hiver/reports/golden_eval_methodology.md) — 200-thread sampling protocol and zero-leakage guarantees.
-- **Pipeline Spot-Check Audit**: [`reports/agent_spotcheck.md`](file:///d:/Academic%20Projects/Hiver/reports/agent_spotcheck.md) — 16-case human verification and grounding false-negative analysis.
-- **Pipeline Statistics**: [`reports/pipeline_stats.json`](file:///d:/Academic%20Projects/Hiver/reports/pipeline_stats.json) — Comprehensive telemetry and token costs across all pipeline stages.
-- **Taxonomy Derivation**: [`reports/taxonomy_derivation.md`](file:///d:/Academic%20Projects/Hiver/reports/taxonomy_derivation.md) — Cluster derivation and category boundary definitions.
+| **Language** | Python 3.11 | High-performance execution with C-extensions (`numpy`, `scipy`). |
+| **API Framework** | FastAPI + Uvicorn | Async ASGI microservice with typed Pydantic validation. |
+| **Vector Store** | ChromaDB (v0.5+) | Embedded vector database; local persistent storage without cloud lock-in. |
+| **Embeddings** | `all-MiniLM-L6-v2` | 384-dimensional dense semantic embeddings via fastembed ONNX runtime. |
+| **LLM Inference** | Groq Cloud SDK | Ultra-low latency inference (`qwen/qwen3.8-27b`) with automatic key rotation. |
+| **Graph Processing**| `scipy.sparse.csgraph` | Connected components algorithm for 2.81M tweet conversation tree reconstruction. |
+| **Data Format** | Apache Parquet (pyarrow) | High-compression columnar storage preserving strict types across all pipeline stages. |
+| **Testing** | Pytest + pytest-asyncio | 32 automated tests verifying schemas, zero-leakage invariants, and policy gating. |
+| **Frontend Demo** | React 19 + Vite + Tailwind | Single-page inspection UI with real pipeline stepper and ChromaDB evidence display. |
